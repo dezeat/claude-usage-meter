@@ -1,0 +1,11 @@
+{
+  "session_id": "fixture-session-0002",
+  "transcript_path": "/tmp/usage-meter-fixture/session.jsonl",
+  "model": { "id": "claude-opus-4-8", "display_name": "Opus 4.8" },
+  "cost": { "total_cost_usd": 1.07 },
+  "context_window": {
+    "total_input_tokens": 26000,
+    "context_window_size": 200000,
+    "used_percentage": 13
+  }
+}

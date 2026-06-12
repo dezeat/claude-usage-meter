@@ -1,0 +1,7 @@
+{"type":"user","message":{"role":"user","content":"synthetic prompt"}}
+{"type":"assistant","requestId":"req-1","message":{"id":"msg-1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":1000,"cache_creation_input_tokens":50}}}
+{"type":"assistant","requestId":"req-1","message":{"id":"msg-1","model":"claude-opus-4-8","usage":{"input_tokens":100,"output_tokens":20,"cache_read_input_tokens":1000,"cache_creation_input_tokens":50}}}
+{"type":"assistant","requestId":"req-2","message":{"id":"msg-2","model":"claude-opus-4-8","usage":{"input_tokens":200,"output_tokens":40,"cache_read_input_tokens":2000,"cache_creation_input_tokens":0}}}
+{"type":"assistant","requestId":"req-3","message":{"id":"msg-3","model":"claude-sonnet-4-6","usage":{"input_tokens":10,"output_tokens":5}}}
+{"type":"summary","summary":"not an assistant line"}
+{bad json not parseable

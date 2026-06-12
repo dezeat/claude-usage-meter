@@ -1,0 +1,20 @@
+{
+  "name": "usage-meter",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Self-built Claude Code usage meter (statusline pace bars + after-task cost summary).",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test \"dist/**/*.test.js\"",
+    "check": "npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^6.0.3"
+  }
+}
