@@ -29,8 +29,8 @@ test("the Pro/Max line shows both limits with percentages and countdowns", () =>
 
   assert.match(line, /Opus 4\.8/);
   assert.match(line, /ctx .* 24%/);
-  assert.match(line, /5h .* 52% ⟳2h00m/);
-  assert.match(line, /7d .* 68% ⟳2d3h/);
+  assert.match(line, /5h .* 52% ⟳ 2h00m/);
+  assert.match(line, /7d .* 68% ⟳ 2d3h/);
   assert.match(line, /\$3\.45/);
   assert.ok(!line.includes("\n"));
 });

@@ -28,7 +28,7 @@ function renderLimit(
   const bar = paceBar(window.usedPercentage, fraction, color);
   const percentage = `${Math.round(window.usedPercentage)}%`;
   const remainingSeconds = window.resetsAt - now.getTime() / 1000;
-  const reset = paint(`⟳${formatCountdown(remainingSeconds)}`, "dim", color);
+  const reset = paint(`⟳ ${formatCountdown(remainingSeconds)}`, "dim", color);
   return `${label} ${bar} ${percentage} ${reset}`;
 }
 
