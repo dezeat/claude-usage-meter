@@ -14,6 +14,12 @@ updates:
       dev-dependencies:
         patterns: ["*"]
         update-types: ["minor", "patch"]
+    # @types/node major bumps are ignored: the types should not race ahead of the
+    # supported Node range (floor 22.13), and the recurring major PRs are noise.
+    # Minor/patch still flow through the grouped dev-dependencies update above.
+    ignore:
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
