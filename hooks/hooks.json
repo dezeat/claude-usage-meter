@@ -8,6 +8,14 @@
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/summary-hook.js\""
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/index-hook.js\""
+          }
+        ]
       }
     ]
   }
