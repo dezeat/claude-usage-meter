@@ -1,0 +1,2 @@
+{"type":"user","timestamp":"2026-05-20T14:00:00.000Z","gitBranch":"feat/foo"}
+{"type":"assistant","timestamp":"2026-05-20T14:01:00.000Z","gitBranch":"feat/foo","requestId":"req-b1","message":{"id":"msg-b1","model":"claude-opus-4-8","usage":{"input_tokens":400,"output_tokens":100,"cache_read_input_tokens":1000,"cache_creation_input_tokens":200}}}
