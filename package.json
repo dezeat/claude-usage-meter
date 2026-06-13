@@ -1,21 +1,62 @@
 {
-  "name": "usage-meter",
+  "name": "claude-usage-meter",
   "version": "0.1.0",
-  "private": true,
-  "description": "Self-built Claude Code usage meter (statusline pace bars + after-task cost summary).",
+  "description": "Live Claude Code usage meter: a three-row statusline (limit pace bars, cost-forward spend, cross-session fleet) plus an after-task cost summary. No network, no telemetry, zero runtime dependencies.",
   "type": "module",
+  "license": "MIT",
+  "author": {
+    "name": "dezeat"
+  },
+  "homepage": "https://github.com/dezeat/claude-usage-meter#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dezeat/claude-usage-meter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/dezeat/claude-usage-meter/issues"
+  },
+  "keywords": [
+    "claude-code",
+    "claude",
+    "claude-code-plugin",
+    "statusline",
+    "usage",
+    "cost",
+    "rate-limits",
+    "token-usage",
+    "observability"
+  ],
   "engines": {
     "node": ">=22.5"
   },
   "scripts": {
-    "build": "tsc",
-    "typecheck": "tsc --noEmit",
-    "test": "tsc && node --test \"dist/**/*.test.js\"",
-    "check": "npm run typecheck && npm run test",
-    "report": "tsc && node dist/report-cli.js"
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\"",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run build && npm run test",
+    "report": "npm run build && node dist/report-cli.js",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "*.{ts,js}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": [
+      "prettier --write"
+    ]
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
-    "typescript": "^6.0.3"
+    "eslint": "^10.4.1",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.7",
+    "prettier": "^3.8.4",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.61.0"
   }
 }

@@ -1,0 +1,14 @@
+#!/bin/sh
+# Fast pre-commit gate: a large-file guard, staged-file lint/format via
+# lint-staged, and a whole-project typecheck. The full suite runs on push.
+set -e
+
+git diff --cached --name-only --diff-filter=AM | while IFS= read -r f; do
+  if [ -f "$f" ] && [ "$(wc -c <"$f")" -gt 1048576 ]; then
+    echo "pre-commit: $f is larger than 1MB — large files don't belong in history" >&2
+    exit 1
+  fi
+done
+
+npx lint-staged
+npm run typecheck
