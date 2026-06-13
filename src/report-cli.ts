@@ -9,7 +9,7 @@ import {
 import { DEFAULT_PRICING } from "./pricing.js";
 import { formatReport } from "./report.js";
 
-const INDEX_PATH = join(homedir(), ".claude", "usage-meter", "index.json");
+const INDEX_PATH = join(homedir(), ".claude", "usage-meter", "index.db");
 const CLAUDE_DIR = join(homedir(), ".claude", "projects");
 
 function emptyIndex(): CrossSessionIndex {

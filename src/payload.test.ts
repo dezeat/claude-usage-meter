@@ -67,6 +67,36 @@ test("a non-object payload parses to an empty result", () => {
     costUsd: undefined,
     fiveHour: undefined,
     sevenDay: undefined,
+    sessionId: undefined,
+    transcriptPath: undefined,
   });
   assert.deepEqual(parsePayload("nonsense").fiveHour, undefined);
+});
+
+test("session_id and transcript_path narrow to sessionId and transcriptPath", () => {
+  const parsed = parsePayload({
+    session_id: "abc-123",
+    transcript_path: "/home/u/.claude/projects/p/abc-123.jsonl",
+    cost: { total_cost_usd: 1.0 },
+  });
+
+  assert.equal(parsed.sessionId, "abc-123");
+  assert.equal(
+    parsed.transcriptPath,
+    "/home/u/.claude/projects/p/abc-123.jsonl",
+  );
+});
+
+test("absent session_id and transcript_path leave both undefined without throwing", () => {
+  const parsed = parsePayload({ cost: { total_cost_usd: 1.0 } });
+
+  assert.equal(parsed.sessionId, undefined);
+  assert.equal(parsed.transcriptPath, undefined);
+});
+
+test("non-string session_id and transcript_path are ignored, not coerced", () => {
+  const parsed = parsePayload({ session_id: 42, transcript_path: false });
+
+  assert.equal(parsed.sessionId, undefined);
+  assert.equal(parsed.transcriptPath, undefined);
 });

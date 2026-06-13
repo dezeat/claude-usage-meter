@@ -7,7 +7,7 @@ import { DEFAULT_PRICING } from "./pricing.js";
 import { PLACEHOLDER_LINE, renderLine } from "./render.js";
 import { readStdin } from "./stdin.js";
 
-const INDEX_PATH = join(homedir(), ".claude", "usage-meter", "index.json");
+const INDEX_PATH = join(homedir(), ".claude", "usage-meter", "index.db");
 const CLAUDE_DIR = join(homedir(), ".claude", "projects");
 
 // NO_COLOR convention: any non-empty value disables ANSI colour.
@@ -27,6 +27,7 @@ async function main(): Promise<void> {
   const line = renderLine(parsePayload(payload), new Date(), {
     color: colorEnabled(),
     index,
+    indexPath: INDEX_PATH,
   });
   process.stdout.write(`${line}\n`);
 }

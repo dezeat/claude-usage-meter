@@ -6,6 +6,7 @@ import {
   FIVE_HOUR_SECONDS,
   contextBar,
   elapsedFraction,
+  fillColor,
   formatCountdown,
   paceBar,
 } from "./bars.js";
@@ -26,27 +27,55 @@ test("elapsed fraction clamps to [0,1] outside the window", () => {
   assert.equal(elapsedFraction(resetsAt, FIVE_HOUR_SECONDS, farFuture), 0);
 });
 
-test("burning ahead of pace reddens the overshoot cells", () => {
-  const overPace = paceBar(78, 0.4, true);
-  assert.ok(overPace.includes(ANSI.red), "expected red fill past the marker");
+test("the flat rule is green at 50, yellow at 70, red above", () => {
+  assert.equal(fillColor(40), "green");
+  assert.equal(fillColor(50), "green");
+  assert.equal(fillColor(60), "yellow");
+  assert.equal(fillColor(70), "yellow");
+  assert.equal(fillColor(85), "red");
+  assert.equal(fillColor(71), "red");
 });
 
-test("staying under pace keeps the bar green with no red", () => {
-  const underPace = paceBar(40, 0.7, true);
-  assert.ok(underPace.includes(ANSI.green), "expected green fill");
-  assert.ok(!underPace.includes(ANSI.red), "expected no red while under pace");
+test("the pace bar colours by absolute fill, not by pace overshoot", () => {
+  // Same 40% fill, opposite pace fractions — both green under the flat rule.
+  const behind = paceBar(40, 0.1, true);
+  const ahead = paceBar(40, 0.9, true);
+  assert.ok(behind.includes(ANSI.green));
+  assert.ok(ahead.includes(ANSI.green));
+  assert.ok(
+    !behind.includes(ANSI.red),
+    "no overshoot reddening under flat rule",
+  );
+  assert.ok(
+    !ahead.includes(ANSI.red),
+    "no overshoot reddening under flat rule",
+  );
 });
 
-test("the pace marker is always drawn", () => {
+test("a 5h/7d bar reddens at high fill and yellows in the middle band", () => {
+  assert.ok(paceBar(60, 0.5, true).includes(ANSI.yellow));
+  assert.ok(paceBar(85, 0.5, true).includes(ANSI.red));
+  // ≥ 90 no longer forces special behaviour beyond the flat red band.
+  assert.ok(!paceBar(85, 0.5, true).includes(ANSI.green));
+});
+
+test("the pace marker is always drawn and does not change cell colour", () => {
   assert.ok(paceBar(40, 0.7, false).includes("│"));
   assert.ok(paceBar(0, 0, false).includes("│"));
   assert.ok(paceBar(100, 1, false).includes("│"));
+
+  // Remove the painted marker token (brightWhite │ reset) so only the coloured
+  // fill/empty cells remain, then assert they are byte-identical for the same
+  // fill across two pace fractions: colour is the flat rule, only the marker moves.
+  const marker = `${ANSI.brightWhite}│${ANSI.reset}`;
+  const cells = (bar: string): string => bar.split(marker).join("");
+  assert.equal(cells(paceBar(60, 0.2, true)), cells(paceBar(60, 0.9, true)));
 });
 
-test("context bar colours by absolute fill, not pace", () => {
-  assert.ok(contextBar(20, true).includes(ANSI.green));
-  assert.ok(contextBar(65, true).includes(ANSI.yellow));
-  assert.ok(contextBar(92, true).includes(ANSI.red));
+test("context bar colours by absolute fill under the flat rule", () => {
+  assert.ok(contextBar(40, true).includes(ANSI.green));
+  assert.ok(contextBar(60, true).includes(ANSI.yellow));
+  assert.ok(contextBar(85, true).includes(ANSI.red));
 });
 
 test("countdown formats minutes, hours and days distinctly", () => {

@@ -10,6 +10,8 @@ export interface ParsedPayload {
   costUsd?: number;
   fiveHour?: RateWindow;
   sevenDay?: RateWindow;
+  sessionId?: string;
+  transcriptPath?: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -50,5 +52,7 @@ export function parsePayload(value: unknown): ParsedPayload {
     costUsd: cost ? asNumber(cost.total_cost_usd) : undefined,
     fiveHour: limits ? parseWindow(limits.five_hour) : undefined,
     sevenDay: limits ? parseWindow(limits.seven_day) : undefined,
+    sessionId: asString(root.session_id),
+    transcriptPath: asString(root.transcript_path),
   };
 }

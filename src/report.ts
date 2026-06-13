@@ -1,31 +1,15 @@
 import { paint } from "./ansi.js";
+import { humanTokens } from "./format.js";
 import {
   type CrossSessionIndex,
   type ModelUsage,
   monthTotals,
+  sumTokens,
 } from "./index-store.js";
 
 const SPARKLINE_RAMP = "▁▂▃▄▅▆▇█";
 const SPARKLINE_WIDTH = 8;
 const MID_RAMP_CHAR = "▄";
-
-function totalTokens(usage: Record<string, ModelUsage>): number {
-  let n = 0;
-  for (const u of Object.values(usage)) {
-    n +=
-      u.inputTokens +
-      u.outputTokens +
-      u.cacheReadTokens +
-      u.cacheCreationTokens;
-  }
-  return n;
-}
-
-function abbreviateTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
-  return String(n);
-}
 
 function sparkline(series: number[]): string {
   if (series.length === 0) return " ".repeat(SPARKLINE_WIDTH);
@@ -95,7 +79,7 @@ function groupByModelClass(
     if (!date.startsWith(month)) continue;
     const cls = rec.modelClass;
     const existing = classes.get(cls);
-    const toks = totalTokens(rec.tokens);
+    const toks = sumTokens(rec.tokens);
     if (existing === undefined) {
       classes.set(cls, { costUsd: rec.costUsd, tokenCount: toks });
     } else {
@@ -118,7 +102,7 @@ function formatDaySection(dayRows: DayRow[], color: boolean): string {
     return lines.join("\n");
   }
 
-  const tokenSeries = dayRows.map((r) => totalTokens(r.tokens));
+  const tokenSeries = dayRows.map((r) => sumTokens(r.tokens));
   const spark = sparkline(tokenSeries);
   const sparkChars = [...spark];
 
@@ -131,7 +115,7 @@ function formatDaySection(dayRows: DayRow[], color: boolean): string {
     const barChar = sparkChars[i] ?? " ";
     // Pad the sparkline cell to two chars (ambiguous-width glyph rule)
     const barCell = `${barChar} `;
-    const tokStr = abbreviateTokens(totalTokens(row.tokens));
+    const tokStr = humanTokens(sumTokens(row.tokens));
     const tokCol = `${tokStr} tok`.padStart(tokCw);
     const costStr = `$${row.costUsd.toFixed(2)}`.padStart(costCw);
     lines.push(
@@ -164,7 +148,7 @@ function formatModelClassSection(
 
   for (const row of classCounts) {
     const clsCol = row.cls.padEnd(clsCw);
-    const tokStr = abbreviateTokens(row.tokenCount);
+    const tokStr = humanTokens(row.tokenCount);
     const tokCol = `${tokStr} tok`.padStart(tokCw);
     const costStr = `$${row.costUsd.toFixed(2)}`.padStart(costCw);
     lines.push(
@@ -200,7 +184,7 @@ function formatBranchSection(
 
   for (const [branch, totals] of entries) {
     const branchCol = branch.padEnd(branchCw);
-    const tokStr = abbreviateTokens(totalTokens(totals.tokens));
+    const tokStr = humanTokens(sumTokens(totals.tokens));
     const tokCol = `${tokStr} tok`.padStart(tokCw);
     const costStr = `$${totals.costUsd.toFixed(2)}`.padStart(costCw);
     lines.push(
@@ -228,7 +212,7 @@ export function formatReport(
 
   const billingLine =
     `Billing period (${month}):` +
-    `   ${abbreviateTokens(totalTokens(billing.tokens))} tok` +
+    `   ${humanTokens(sumTokens(billing.tokens))} tok` +
     `   $${billing.costUsd.toFixed(2)}`;
 
   const sections = [

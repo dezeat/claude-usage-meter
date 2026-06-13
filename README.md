@@ -36,7 +36,8 @@ cannot register the main statusLine; its own `settings.json` supports only
 {
   "statusLine": {
     "type": "command",
-    "command": "node /absolute/path/to/plugins/usage-meter/dist/statusline.js"
+    "command": "node /absolute/path/to/plugins/usage-meter/dist/statusline.js",
+    "refreshInterval": 3
   }
 }
 ```
@@ -44,6 +45,15 @@ cannot register the main statusLine; its own `settings.json` supports only
 Use the absolute path to wherever this directory lives. On an
 API-billing account (no `rate_limits` in the payload) the line degrades
 to model + context + cost and never errors.
+
+`refreshInterval` (seconds, default `3`, minimum `1`) re-runs the command
+on a fixed idle timer _in addition_ to Claude Code's events. Without it the
+line goes quiet between messages, so the reset countdowns and the live
+fleet counts freeze while you read or think; the timer keeps them ticking.
+The script runs locally over your own transcripts — refreshing costs **no
+API tokens** — and an idle tick where no transcript has grown skips the
+index write entirely, so each tick stays cheap. Tune it up if you prefer a
+calmer bar; `1` is the lowest the harness accepts.
 
 The after-task summary (S02) ships as a `Stop` hook and _is_ activated by
 loading the plugin:

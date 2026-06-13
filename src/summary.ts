@@ -1,11 +1,6 @@
 import { type CostByModel, type PricingTable } from "./pricing.js";
 import { type UsageByModel } from "./aggregate.js";
-
-function humanTokens(count: number): string {
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}k`;
-  return `${count}`;
-}
+import { humanTokens } from "./format.js";
 
 function box(lines: string[]): string {
   const width = Math.max(...lines.map((line) => line.length));

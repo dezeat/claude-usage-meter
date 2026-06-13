@@ -1,15 +1,18 @@
-import {
-  readFileSync,
-  writeFileSync,
-  mkdirSync,
-  statSync,
-  readdirSync,
-  type Dirent,
-} from "node:fs";
+import { readFileSync, statSync, readdirSync, type Dirent } from "node:fs";
 import { join, basename } from "node:path";
 
 import { aggregateTranscript, type ModelUsage } from "./aggregate.js";
 import { cost, type PricingTable } from "./pricing.js";
+import {
+  openDb,
+  getSession,
+  allSessions,
+  upsertSession,
+  countSessionsByClassForMonth,
+  countLiveSessionsByClass,
+  monthClassSpendRows,
+  type SessionRow,
+} from "./db.js";
 
 export type { ModelUsage };
 
@@ -195,33 +198,63 @@ export function discoverTranscriptPaths(claudeDir: string): string[] {
   return paths;
 }
 
-function emptyIndex(): CrossSessionIndex {
-  return { sessions: {}, byMonth: {}, byBranch: {}, updatedAt: 0 };
+function rowToRecord(row: SessionRow): SessionRecord {
+  return {
+    path: row.path,
+    sessionId: row.sessionId,
+    branch: row.branch,
+    modelClass: row.modelClass,
+    tokens: row.tokens,
+    costUsd: row.costUsd,
+    lastTs: row.lastTs,
+    byteOffset: row.byteOffset,
+  };
 }
 
-function rebuildRollups(sessions: Record<string, SessionRecord>): {
-  byMonth: CrossSessionIndex["byMonth"];
-  byBranch: CrossSessionIndex["byBranch"];
-} {
+// Materialise the in-memory CrossSessionIndex the renderers/report consume from
+// the SQLite rows. The month/branch rollups are folded from the rows here in JS
+// rather than via GROUP BY, because the per-model token structure fleet/report
+// need is opaque JSON in the store and cannot be summed in SQL; cost is folded
+// alongside it in the same pass.
+function materializeIndex(
+  rows: SessionRow[],
+  updatedAt: number,
+): CrossSessionIndex {
+  const sessions: Record<string, SessionRecord> = {};
   const byMonth: CrossSessionIndex["byMonth"] = {};
   const byBranch: CrossSessionIndex["byBranch"] = {};
 
-  for (const rec of Object.values(sessions)) {
-    const month =
-      rec.lastTs > 0
-        ? new Date(rec.lastTs).toISOString().slice(0, 7)
-        : "unknown";
+  for (const row of rows) {
+    sessions[row.sessionId] = rowToRecord(row);
 
+    const month = row.month;
     const mo = (byMonth[month] ??= { tokens: {}, costUsd: 0 });
-    mergeTokens(mo.tokens, rec.tokens);
-    mo.costUsd += rec.costUsd;
+    mergeTokens(mo.tokens, row.tokens);
+    mo.costUsd += row.costUsd;
 
-    const br = (byBranch[rec.branch] ??= { tokens: {}, costUsd: 0 });
-    mergeTokens(br.tokens, rec.tokens);
-    br.costUsd += rec.costUsd;
+    const br = (byBranch[row.branch] ??= { tokens: {}, costUsd: 0 });
+    mergeTokens(br.tokens, row.tokens);
+    br.costUsd += row.costUsd;
   }
 
-  return { byMonth, byBranch };
+  return { sessions, byMonth, byBranch, updatedAt };
+}
+
+function monthFor(lastTs: number): string {
+  return lastTs > 0 ? new Date(lastTs).toISOString().slice(0, 7) : "unknown";
+}
+
+// Counts upserts performed by updateIndex, so the refresh-debounce invariant
+// (a tick where no transcript grew performs zero writes) is directly
+// assertable. Test-only signal; nothing in the render/report path reads it.
+let upsertCount = 0;
+
+export function upsertCountForTest(): number {
+  return upsertCount;
+}
+
+export function resetUpsertCountForTest(): void {
+  upsertCount = 0;
 }
 
 export async function updateIndex(
@@ -229,13 +262,26 @@ export async function updateIndex(
   claudeDir: string,
   pricingTable: PricingTable,
 ): Promise<CrossSessionIndex> {
-  let index = await readIndex(indexPath);
-  if (index === null) index = emptyIndex();
+  const db = openDb(indexPath);
 
   const transcripts = discoverTranscriptPaths(claudeDir);
 
+  // Read-only tick invariant: the per-file `fileSize <= currentOffset` skip
+  // below is the debounce — when the statusline re-runs on its idle
+  // refreshInterval and no transcript has grown past its stored byte_offset,
+  // every file is skipped, no branch reaches upsertSession, and the function
+  // returns the rollups materialised purely from a read. Live counts stay
+  // correct because they recompute from each row's stored last_ts against the
+  // current clock downstream, so a session can age out of the liveness window
+  // with no new bytes and no write.
   for (const transcriptPath of transcripts) {
-    const existing = index.sessions[transcriptPath];
+    // Row key is the session_id (transcript UUID), not the path: a session has
+    // one stable id across worktrees, so its incremental byte_offset and tokens
+    // live on one row regardless of where the file is discovered.
+    const sessionId = basename(transcriptPath, ".jsonl");
+    const existingRow = getSession(db, sessionId);
+    const existing: SessionRecord | undefined =
+      existingRow === undefined ? undefined : rowToRecord(existingRow);
     const currentOffset = existing?.byteOffset ?? 0;
 
     let fileSize: number;
@@ -282,43 +328,38 @@ export async function updateIndex(
     const usageByModel = { models: folded.tokens, skippedLines: 0 };
     const costs = cost(usageByModel, pricingTable);
 
-    const sessionId = basename(transcriptPath, ".jsonl");
-
-    const record: SessionRecord = {
-      path: transcriptPath,
+    upsertSession(db, {
       sessionId,
+      path: transcriptPath,
       branch: folded.branch,
       modelClass: folded.modelClass,
       tokens: folded.tokens,
       costUsd: costs.totalUsd,
       lastTs: folded.lastTs,
       byteOffset: newOffset,
-    };
-
-    index.sessions[transcriptPath] = record;
+      month: monthFor(folded.lastTs),
+    });
+    upsertCount += 1;
   }
 
-  const rollups = rebuildRollups(index.sessions);
-  index.byMonth = rollups.byMonth;
-  index.byBranch = rollups.byBranch;
-  index.updatedAt = Date.now();
-
-  const dir = indexPath.slice(0, indexPath.lastIndexOf("/"));
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(indexPath, JSON.stringify(index, null, 2), "utf8");
-
+  const index = materializeIndex(allSessions(db), Date.now());
+  db.close();
   return index;
 }
 
 export async function readIndex(
   indexPath: string,
 ): Promise<CrossSessionIndex | null> {
+  let rows: SessionRow[];
   try {
-    const raw = readFileSync(indexPath, "utf8");
-    return JSON.parse(raw) as CrossSessionIndex;
+    const db = openDb(indexPath);
+    rows = allSessions(db);
+    db.close();
   } catch {
     return null;
   }
+  if (rows.length === 0) return null;
+  return materializeIndex(rows, Date.now());
 }
 
 export function monthTotals(
@@ -333,4 +374,139 @@ export function branchTotals(
   branch: string,
 ): { tokens: Record<string, ModelUsage>; costUsd: number } {
   return index.byBranch[branch] ?? { tokens: {}, costUsd: 0 };
+}
+
+export function sumTokens(tokens: Record<string, ModelUsage>): number {
+  let total = 0;
+  for (const usage of Object.values(tokens)) {
+    total +=
+      usage.inputTokens +
+      usage.outputTokens +
+      usage.cacheReadTokens +
+      usage.cacheCreationTokens;
+  }
+  return total;
+}
+
+// One session's stored token totals + cost, keyed by session_id (the PK the
+// store rows on). transcriptPath is a secondary lookup against the non-PK path
+// column, used only when sessionId is absent from the render payload — if both
+// are present, sessionId wins and path is never queried. Returns undefined when
+// no row matches (absence ≠ zero: the transcript may not be indexed yet this
+// render).
+export function sessionTotals(
+  index: CrossSessionIndex,
+  sessionId: string | undefined,
+  transcriptPath: string | undefined,
+): { tokens: Record<string, ModelUsage>; costUsd: number } | undefined {
+  if (sessionId !== undefined) {
+    const record = index.sessions[sessionId];
+    return record === undefined
+      ? undefined
+      : { tokens: record.tokens, costUsd: record.costUsd };
+  }
+  if (transcriptPath !== undefined) {
+    for (const record of Object.values(index.sessions)) {
+      if (record.path === transcriptPath) {
+        return { tokens: record.tokens, costUsd: record.costUsd };
+      }
+    }
+  }
+  return undefined;
+}
+
+// The YYYY-MM a timestamp falls in, matching the `month` column written by the
+// store. fleet-render derives a session's month from its lastTs through this so
+// the render-side month scope and the stored column never diverge.
+export function monthOf(lastTs: number): string {
+  return monthFor(lastTs);
+}
+
+export interface ClassCount {
+  cls: string;
+  count: number;
+}
+
+function sortClassCounts(counts: Map<string, number>): ClassCount[] {
+  return Array.from(counts, ([cls, count]) => ({ cls, count })).sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    return a.cls.localeCompare(b.cls);
+  });
+}
+
+// Sessions in the given calendar month, counted per model class in SQL plus the
+// month grand total. This is the figure the roster anchor divides by — replacing
+// the old all-time `Object.values(sessions).length` that rendered `1/1` on a
+// fresh install. byClass is ordered count-desc then class name.
+export function monthSessionCounts(
+  indexPath: string,
+  month: string,
+): { byClass: ClassCount[]; total: number } {
+  let counts: Map<string, number>;
+  try {
+    const db = openDb(indexPath);
+    counts = countSessionsByClassForMonth(db, month);
+    db.close();
+  } catch {
+    counts = new Map();
+  }
+  const byClass = sortClassCounts(counts);
+  const total = byClass.reduce((sum, c) => sum + c.count, 0);
+  return { byClass, total };
+}
+
+// Per-class count of sessions live right now (last_ts within windowMs of nowMs),
+// ordered count-desc then class name. Independent of month scope by design.
+export function liveSessionCounts(
+  indexPath: string,
+  nowMs: number,
+  windowMs: number,
+): ClassCount[] {
+  let counts: Map<string, number>;
+  try {
+    const db = openDb(indexPath);
+    counts = countLiveSessionsByClass(db, nowMs, windowMs);
+    db.close();
+  } catch {
+    counts = new Map();
+  }
+  return sortClassCounts(counts);
+}
+
+export interface ClassSpend {
+  tokens: number;
+  costUsd: number;
+}
+
+export interface MonthSpend {
+  byClass: Record<string, ClassSpend>;
+  total: ClassSpend;
+}
+
+// Per-model-class token+cost spend for one calendar month, plus the month grand
+// total summed from the same rows. The token total per class uses the shared
+// sumTokens summation, matching every other token figure. The Σ total counts
+// ALL classes for the month, including ones the statusline does not render
+// individually. byClass is keyed by class; an absent class means no sessions of
+// it this month (the renderer treats that as a meaningful zero, not a gap).
+export function monthClassSpend(indexPath: string, month: string): MonthSpend {
+  let byClass: Record<string, ClassSpend> = {};
+  let total: ClassSpend = { tokens: 0, costUsd: 0 };
+  try {
+    const db = openDb(indexPath);
+    const rows = monthClassSpendRows(db, month);
+    db.close();
+    for (const row of rows) {
+      const tokens = sumTokens(row.tokens);
+      const slice = (byClass[row.modelClass] ??= { tokens: 0, costUsd: 0 });
+      slice.tokens += tokens;
+      slice.costUsd += row.costUsd;
+      total.tokens += tokens;
+      total.costUsd += row.costUsd;
+    }
+  } catch {
+    byClass = {};
+    total = { tokens: 0, costUsd: 0 };
+  }
+  return { byClass, total };
 }

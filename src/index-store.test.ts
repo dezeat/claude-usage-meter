@@ -9,6 +9,16 @@ import {
   updateIndex,
   monthTotals,
   branchTotals,
+  sessionTotals,
+  sumTokens,
+  monthSessionCounts,
+  liveSessionCounts,
+  monthClassSpend,
+  monthOf,
+  upsertCountForTest,
+  resetUpsertCountForTest,
+  type CrossSessionIndex,
+  type SessionRecord,
 } from "./index-store.js";
 import { DEFAULT_PRICING } from "./pricing.js";
 
@@ -393,4 +403,394 @@ test("a model id without '-' is handled without crashing and returns a usable cl
     "localmodel",
     "raw id used as class when no known class word matches",
   );
+});
+
+// ---------------------------------------------------------------------------
+// sumTokens / sessionTotals
+// ---------------------------------------------------------------------------
+
+function makeRecord(overrides: Partial<SessionRecord>): SessionRecord {
+  return {
+    path: "/fake/s.jsonl",
+    sessionId: "s",
+    branch: "main",
+    modelClass: "opus",
+    tokens: {},
+    costUsd: 0,
+    lastTs: 0,
+    byteOffset: 0,
+    ...overrides,
+  };
+}
+
+function indexOf(records: SessionRecord[]): CrossSessionIndex {
+  const sessions: CrossSessionIndex["sessions"] = {};
+  for (const rec of records) sessions[rec.sessionId] = rec;
+  return { sessions, byMonth: {}, byBranch: {}, updatedAt: 0 };
+}
+
+test("sumTokens adds input, output and both cache fields across all models", () => {
+  const total = sumTokens({
+    "claude-opus-4-8": {
+      inputTokens: 100,
+      outputTokens: 200,
+      cacheReadTokens: 300,
+      cacheCreationTokens: 400,
+    },
+    "claude-sonnet-4-6": {
+      inputTokens: 1,
+      outputTokens: 2,
+      cacheReadTokens: 3,
+      cacheCreationTokens: 4,
+    },
+  });
+  assert.equal(total, 1010);
+});
+
+test("sessionTotals returns the row matched by session_id", () => {
+  const index = indexOf([
+    makeRecord({
+      sessionId: "abc",
+      costUsd: 2.14,
+      tokens: {
+        "claude-opus-4-8": {
+          inputTokens: 500_000,
+          outputTokens: 500_000,
+          cacheReadTokens: 100_000,
+          cacheCreationTokens: 100_000,
+        },
+      },
+    }),
+  ]);
+  const totals = sessionTotals(index, "abc", undefined);
+  assert.ok(totals);
+  assert.equal(totals.costUsd, 2.14);
+  assert.equal(sumTokens(totals.tokens), 1_200_000);
+});
+
+test("sessionTotals returns undefined when no row matches the session_id", () => {
+  const index = indexOf([makeRecord({ sessionId: "abc" })]);
+  assert.equal(sessionTotals(index, "missing", undefined), undefined);
+});
+
+test("sessionTotals falls back to the path column only when session_id is absent", () => {
+  const index = indexOf([
+    makeRecord({ sessionId: "abc", path: "/t/abc.jsonl", costUsd: 9.9 }),
+  ]);
+  const byPath = sessionTotals(index, undefined, "/t/abc.jsonl");
+  assert.ok(byPath);
+  assert.equal(byPath.costUsd, 9.9);
+});
+
+test("when session_id is present it wins and a stale path is not consulted", () => {
+  const index = indexOf([
+    makeRecord({ sessionId: "abc", path: "/t/abc.jsonl", costUsd: 9.9 }),
+  ]);
+  // session_id present but unknown → undefined, even though the path would match.
+  assert.equal(sessionTotals(index, "missing", "/t/abc.jsonl"), undefined);
+});
+
+// ---------------------------------------------------------------------------
+// Store-level month + live count wrappers over the SQLite store
+// ---------------------------------------------------------------------------
+
+test("monthSessionCounts and liveSessionCounts scope a two-month store correctly", async () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "index.db");
+
+  // now sits in June; one June session is live, the others are old.
+  const nowMs = Date.UTC(2026, 5, 15, 12, 0, 0);
+  const liveTs = new Date(nowMs - 60 * 1000).toISOString();
+
+  const juneLive = writeJsonl(tmp, "june-live.jsonl", [
+    assistantLine({
+      ts: liveTs,
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const juneIdle = writeJsonl(tmp, "june-idle.jsonl", [
+    assistantLine({
+      ts: "2026-06-01T10:00:00.000Z",
+      branch: "main",
+      reqId: "r2",
+      msgId: "m2",
+      model: "claude-sonnet-4-6",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const may = writeJsonl(tmp, "may.jsonl", [
+    assistantLine({
+      ts: "2026-05-20T10:00:00.000Z",
+      branch: "main",
+      reqId: "r3",
+      msgId: "m3",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+
+  const claudeProjects = makeClaudeDir(tmp, [juneLive, juneIdle, may]);
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  const june = monthSessionCounts(dbPath, "2026-06");
+  assert.strictEqual(june.total, 2, "two June sessions, May excluded");
+  const juneByClass = new Map(june.byClass.map((c) => [c.cls, c.count]));
+  assert.strictEqual(juneByClass.get("opus"), 1);
+  assert.strictEqual(juneByClass.get("sonnet"), 1);
+
+  const live = liveSessionCounts(dbPath, nowMs, 5 * 60 * 1000);
+  const liveByClass = new Map(live.map((c) => [c.cls, c.count]));
+  assert.strictEqual(
+    liveByClass.get("opus"),
+    1,
+    "the recent June opus is live",
+  );
+  assert.strictEqual(
+    liveByClass.get("sonnet"),
+    undefined,
+    "the idle June sonnet is not live",
+  );
+});
+
+test("monthOf derives the YYYY-MM the store stamps for a timestamp", () => {
+  assert.strictEqual(monthOf(Date.UTC(2026, 5, 15)), "2026-06");
+  assert.strictEqual(monthOf(0), "unknown");
+});
+
+// ---------------------------------------------------------------------------
+// Refresh debounce: a tick where no transcript grew performs zero writes
+// ---------------------------------------------------------------------------
+
+test("an updateIndex tick where no transcript grew performs zero upserts yet still returns correct totals", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "static.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-sonnet-4-6",
+      input: 100,
+      output: 50,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const dbPath = join(tmp, "index.db");
+
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  // Second tick on an unchanged file: the debounce must skip the write path.
+  resetUpsertCountForTest();
+  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  assert.strictEqual(
+    upsertCountForTest(),
+    0,
+    "no session advanced, so no upsert is performed",
+  );
+
+  const rec = Object.values(index.sessions).find(
+    (s) => s.sessionId === "static",
+  );
+  assert.ok(rec, "the stored session is still returned from the read");
+  assert.strictEqual(rec.tokens["claude-sonnet-4-6"]?.inputTokens, 100);
+  assert.strictEqual(rec.tokens["claude-sonnet-4-6"]?.outputTokens, 50);
+});
+
+test("an updateIndex tick where one of two transcripts grew upserts only the advanced session", async () => {
+  const tmp = makeTmpDir();
+  const stable = writeJsonl(tmp, "stable.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "rS",
+      msgId: "mS",
+      model: "claude-sonnet-4-6",
+      input: 100,
+      output: 50,
+    }),
+  ]);
+  const growing = writeJsonl(tmp, "growing.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "rG1",
+      msgId: "mG1",
+      model: "claude-opus-4-8",
+      input: 200,
+      output: 60,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [stable, growing]);
+  const dbPath = join(tmp, "index.db");
+
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  // Append to only one of the two transcripts in the claude-dir copy.
+  const grownCopy = join(
+    claudeProjects,
+    "-fake-midnight-marble",
+    "growing.jsonl",
+  );
+  const extra = assistantLine({
+    ts: "2026-06-13T10:10:00.000Z",
+    branch: "main",
+    reqId: "rG2",
+    msgId: "mG2",
+    model: "claude-opus-4-8",
+    input: 300,
+    output: 90,
+  });
+  writeFileSync(grownCopy, readFileSync(grownCopy, "utf8") + extra + "\n");
+
+  resetUpsertCountForTest();
+  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  assert.strictEqual(
+    upsertCountForTest(),
+    1,
+    "only the one advanced session is upserted, not the unchanged one",
+  );
+
+  const grew = Object.values(index.sessions).find(
+    (s) => s.sessionId === "growing",
+  );
+  assert.ok(grew);
+  assert.strictEqual(
+    grew.tokens["claude-opus-4-8"]?.inputTokens,
+    500,
+    "the advanced session's cumulative tokens are updated",
+  );
+});
+
+test("live counts reflect the current clock on a read-only tick: a session ages out of the window with no new bytes", async () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "index.db");
+
+  // Build the store once at a clock where the session is fresh.
+  const lastTs = Date.UTC(2026, 5, 15, 12, 0, 0);
+  const transcript = writeJsonl(tmp, "aging.jsonl", [
+    assistantLine({
+      ts: new Date(lastTs).toISOString(),
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  const windowMs = 5 * 60 * 1000;
+
+  // A read-only tick one minute later: still inside the 5-minute window.
+  const liveNow = lastTs + 60 * 1000;
+  resetUpsertCountForTest();
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+  assert.strictEqual(upsertCountForTest(), 0, "no new bytes, no write");
+
+  const liveEarly = new Map(
+    liveSessionCounts(dbPath, liveNow, windowMs).map((c) => [c.cls, c.count]),
+  );
+  assert.strictEqual(liveEarly.get("opus"), 1, "session is live one minute on");
+
+  // A later read-only tick: the same unchanged session has aged past the
+  // window, so it drops out — purely from the clock, with no write.
+  const lateNow = lastTs + 6 * 60 * 1000;
+  const liveLate = new Map(
+    liveSessionCounts(dbPath, lateNow, windowMs).map((c) => [c.cls, c.count]),
+  );
+  assert.strictEqual(
+    liveLate.get("opus"),
+    undefined,
+    "session aged out of the liveness window without any new bytes",
+  );
+});
+
+test("monthClassSpend slices a month's tokens+cost per class with Σ summed over the same rows", async () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "index.db");
+
+  // June: opus 1.0M input → $5.00; sonnet 2.0M input → $6.00. May opus is
+  // excluded from June's slice. Two opus June sessions prove per-class summation.
+  const opusJunA = writeJsonl(tmp, "opus-a.jsonl", [
+    assistantLine({
+      ts: "2026-06-10T10:00:00.000Z",
+      branch: "main",
+      reqId: "ra",
+      msgId: "ma",
+      model: "claude-opus-4-8",
+      input: 600_000,
+      output: 0,
+    }),
+  ]);
+  const opusJunB = writeJsonl(tmp, "opus-b.jsonl", [
+    assistantLine({
+      ts: "2026-06-12T10:00:00.000Z",
+      branch: "main",
+      reqId: "rb",
+      msgId: "mb",
+      model: "claude-opus-4-8",
+      input: 400_000,
+      output: 0,
+    }),
+  ]);
+  const sonnetJun = writeJsonl(tmp, "sonnet.jsonl", [
+    assistantLine({
+      ts: "2026-06-11T10:00:00.000Z",
+      branch: "main",
+      reqId: "rc",
+      msgId: "mc",
+      model: "claude-sonnet-4-6",
+      input: 2_000_000,
+      output: 0,
+    }),
+  ]);
+  const opusMay = writeJsonl(tmp, "opus-may.jsonl", [
+    assistantLine({
+      ts: "2026-05-20T10:00:00.000Z",
+      branch: "main",
+      reqId: "rd",
+      msgId: "md",
+      model: "claude-opus-4-8",
+      input: 9_000_000,
+      output: 0,
+    }),
+  ]);
+
+  const claudeProjects = makeClaudeDir(tmp, [
+    opusJunA,
+    opusJunB,
+    sonnetJun,
+    opusMay,
+  ]);
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  const spend = monthClassSpend(dbPath, "2026-06");
+
+  assert.strictEqual(spend.byClass["opus"]?.tokens, 1_000_000);
+  assert.strictEqual(spend.byClass["opus"]?.costUsd, 5);
+  assert.strictEqual(spend.byClass["sonnet"]?.tokens, 2_000_000);
+  assert.strictEqual(spend.byClass["sonnet"]?.costUsd, 6);
+  assert.strictEqual(
+    spend.byClass["haiku"],
+    undefined,
+    "a class absent from the month has no slice",
+  );
+
+  assert.strictEqual(
+    spend.total.tokens,
+    3_000_000,
+    "Σ tokens over all classes",
+  );
+  assert.strictEqual(spend.total.costUsd, 11, "Σ cost over all classes");
 });
