@@ -1,3 +1,0 @@
-{"type":"user","timestamp":"2026-06-13T11:00:00.000Z","gitBranch":"main"}
-{"type":"assistant","timestamp":"2026-06-13T11:01:00.000Z","gitBranch":"main","requestId":"req-s1","message":{"id":"msg-s1","model":"<synthetic>","usage":{"input_tokens":999,"output_tokens":999,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
-{"type":"assistant","timestamp":"2026-06-13T11:02:00.000Z","gitBranch":"main","requestId":"req-s2","message":{"id":"msg-s2","model":"claude-haiku-4-5","usage":{"input_tokens":50,"output_tokens":20,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}

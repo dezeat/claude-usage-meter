@@ -1,2 +1,0 @@
-{"type":"user","timestamp":"2026-06-13T12:00:00.000Z","gitBranch":"main"}
-{"type":"assistant","timestamp":"2026-06-13T12:01:00.000Z","gitBranch":"main","requestId":"req-nd1","message":{"id":"msg-nd1","model":"localmodel","usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}
