@@ -52,6 +52,17 @@ loading the plugin:
 claude --plugin-dir /absolute/path/to/plugins/usage-meter
 ```
 
+## Off-session report
+
+Run a retrospective usage report across all project sessions:
+
+```bash
+cd plugins/usage-meter
+npm run report
+```
+
+Output: per-day usage with a token sparkline, per-model-class totals, per-branch totals, and a billing-period total.
+
 ## Status
 
 - [x] S01-T01 — plugin scaffold
@@ -59,3 +70,6 @@ claude --plugin-dir /absolute/path/to/plugins/usage-meter
 - [x] S02-T01 — transcript aggregation
 - [x] S02-T02 — pricing table, cost, after-task summary box (Stop hook)
 - [ ] S03 — distribution + pricing-staleness policy (deferred)
+- [x] S04-T01 — incremental cross-session index
+- [x] S04-T02 — statusline fleet roster + monthly $
+- [x] S04-T03 — off-session report dashboard CLI
