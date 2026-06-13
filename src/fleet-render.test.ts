@@ -105,16 +105,38 @@ const FLEET_INDEX = makeIndex(
 
 const FLEET_MONTH = new Date(NOW_MS).toISOString().slice(0, 7);
 
-test("an all-idle fleet renders the count cell as <class> <count>/<total> with no active cell", () => {
+test("an all-idle fleet renders the count cell as <class> <monthCount> Σ <monthTotal> with no active cell", () => {
   const cells = renderRoster(FLEET_INDEX, "opus", FLEET_MONTH, NOW_MS, false);
-  assert.deepStrictEqual(cells, ["opus 2/4"]);
+  assert.deepStrictEqual(cells, ["opus 2 Σ 4"]);
 });
 
-test("the count cell drops the mo qualifier and uses a slash ratio", () => {
+test("the count cell joins the active-class month count and the month total with a Σ connective, never a slash", () => {
   const cells = renderRoster(FLEET_INDEX, "opus", FLEET_MONTH, NOW_MS, false);
-  assert.strictEqual(cells[0], "opus 2/4");
+  assert.strictEqual(cells[0], "opus 2 Σ 4");
   assert.ok(!cells[0]?.includes("mo"), "the mo qualifier is dropped");
-  assert.ok(!cells[0]?.includes("·"), "the ratio uses / not a middle dot");
+  assert.ok(!cells[0]?.includes("/"), "the cell uses ' Σ ', never a slash");
+  assert.ok(!cells[0]?.includes("·"), "the cell uses Σ, not a middle dot");
+});
+
+test("with colour the count cell dims the Σ connective like the spend row while the counts stay bright", () => {
+  const [countCell] = renderRoster(
+    FLEET_INDEX,
+    "opus",
+    FLEET_MONTH,
+    NOW_MS,
+    true,
+  );
+  assert.ok(countCell !== undefined);
+  assert.ok(countCell.includes(`${DIM}opus`), "the class label is dim");
+  assert.ok(
+    countCell.includes(`${DIM}Σ`),
+    "the Σ connective is dim, matching the spend-row Σ",
+  );
+  assert.ok(
+    countCell.includes(`${BRIGHT}2`),
+    "the active-class month count is bright",
+  );
+  assert.ok(countCell.includes(`${BRIGHT}4`), "the month total is bright");
 });
 
 test("the monthly spend cells are cost-forward with Σ, no % and no bar glyphs", () => {
@@ -294,7 +316,7 @@ test("month counts include only current-month sessions and exclude the prior mon
   assert.strictEqual(total, 3, "month total counts only June's 3 sessions");
 });
 
-test("the count cell is the active class count/month total, plus an active cell per live class", () => {
+test("the count cell is the active-class month count Σ month total, plus an active cell per live class", () => {
   const cells = renderRoster(
     TWO_MONTH_INDEX,
     "opus",
@@ -302,16 +324,16 @@ test("the count cell is the active class count/month total, plus an active cell 
     JUN_NOW_MS,
     false,
   );
-  assert.deepStrictEqual(cells, ["opus 2/3", "active ● opus 1 ● sonnet 1"]);
+  assert.deepStrictEqual(cells, ["opus 2 Σ 3", "active ● opus 1 ● sonnet 1"]);
 });
 
-test("a fresh single-session fixture renders the month count, never an all-time 1/1", () => {
+test("a fresh single-session fixture renders the month count, never an all-time total", () => {
   const single = makeIndex(
     [{ modelClass: "opus", lastTs: JUN_IDLE_TS, costUsd: 1.0 }],
     0,
   );
   const cells = renderRoster(single, "opus", JUN_MONTH, JUN_NOW_MS, false);
-  assert.deepStrictEqual(cells, ["opus 1/1"]);
+  assert.deepStrictEqual(cells, ["opus 1 Σ 1"]);
 
   const priorMonthOnly = makeIndex(
     [{ modelClass: "opus", lastTs: MAY_TS, costUsd: 1.0 }],
@@ -326,7 +348,7 @@ test("a fresh single-session fixture renders the month count, never an all-time 
   );
   assert.deepStrictEqual(
     emptyCells,
-    ["opus 0/0"],
+    ["opus 0 Σ 0"],
     "a session only in a prior month leaves the current month empty",
   );
 });
@@ -348,7 +370,7 @@ test("the live active tally self-excludes the current session", () => {
     false,
     "session-0",
   );
-  assert.deepStrictEqual(cells, ["opus 2/2", "active ● opus 1"]);
+  assert.deepStrictEqual(cells, ["opus 2 Σ 2", "active ● opus 1"]);
 });
 
 test("the active cell is dropped when the current session is the only live one", () => {
@@ -364,7 +386,7 @@ test("the active cell is dropped when the current session is the only live one",
     false,
     "session-0",
   );
-  assert.deepStrictEqual(cells, ["opus 1/1"]);
+  assert.deepStrictEqual(cells, ["opus 1 Σ 1"]);
 });
 
 test("live count includes only sessions within the liveness window, grouped per class", () => {
