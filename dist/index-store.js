@@ -124,7 +124,7 @@ export function discoverTranscriptPaths(claudeDir) {
             withFileTypes: true,
             encoding: "utf8",
         })
-            .filter((e) => e.isDirectory() && e.name.includes("midnight-marble"))
+            .filter((e) => e.isDirectory())
             .map((e) => join(claudeDir, e.name));
     }
     catch {

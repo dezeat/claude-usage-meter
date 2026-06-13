@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 
 import {
   foldLines,
+  discoverTranscriptPaths,
   updateIndex,
   monthTotals,
   branchTotals,
@@ -793,4 +794,24 @@ test("monthClassSpend slices a month's tokens+cost per class with Σ summed over
     "Σ tokens over all classes",
   );
   assert.strictEqual(spend.total.costUsd, 11, "Σ cost over all classes");
+});
+
+test("discovery spans every project, not a single hardcoded project name", () => {
+  const tmp = makeTmpDir();
+  const projects = join(tmp, "projects");
+  // The cross-session view covers "every project session" (README), so discovery
+  // must not be gated on the project-directory name. Two unrelated projects, named
+  // for arbitrary user repos, are both indexed.
+  const acme = join(projects, "-home-u-work-acme-api");
+  const side = join(projects, "-home-u-side-quest");
+  mkdirSync(acme, { recursive: true });
+  mkdirSync(side, { recursive: true });
+  const a = writeJsonl(acme, "a.jsonl", [
+    userLine("2026-06-13T10:00:00.000Z", "main"),
+  ]);
+  const b = writeJsonl(side, "b.jsonl", [
+    userLine("2026-06-13T10:00:00.000Z", "main"),
+  ]);
+
+  assert.deepEqual(new Set(discoverTranscriptPaths(projects)), new Set([a, b]));
 });
