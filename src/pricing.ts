@@ -26,27 +26,25 @@ export interface CostByModel {
 
 // Hand-maintained (epic constraint: zero network). Cache write = 1.25x input,
 // cache read = 0.1x input (Anthropic's standard 5-minute-TTL cache pricing).
-// Update asOf and rates by hand; staleness policy is E01-S03.
+// Verified against the published model pricing on the asOf date; update both by
+// hand. Keys are dateless aliases — normalizeModelId() strips the -YYYYMMDD
+// snapshot suffix that pre-4.6 transcripts carry, so one entry prices both forms.
 export const DEFAULT_PRICING: PricingTable = {
-  asOf: "2026-06-12",
+  asOf: "2026-06-13",
   rates: {
     "claude-opus-4-8": opus(),
     "claude-opus-4-7": opus(),
     "claude-opus-4-6": opus(),
+    "claude-opus-4-5": opus(),
+    // Opus 4.1 and 4.0 predate the 4.6 price drop and still bill at $15/$75.
+    "claude-opus-4-1": opusLegacy(),
+    "claude-opus-4-0": opusLegacy(),
     "claude-sonnet-4-6": sonnet(),
     "claude-sonnet-4-5": sonnet(),
-    "claude-haiku-4-5": {
-      inputPerMTok: 1,
-      outputPerMTok: 5,
-      cacheReadPerMTok: 0.1,
-      cacheCreationPerMTok: 1.25,
-    },
-    "claude-fable-5": {
-      inputPerMTok: 10,
-      outputPerMTok: 50,
-      cacheReadPerMTok: 1,
-      cacheCreationPerMTok: 12.5,
-    },
+    "claude-sonnet-4-0": sonnet(),
+    "claude-haiku-4-5": haiku(),
+    "claude-fable-5": fable(),
+    "claude-mythos-5": fable(),
   },
 };
 
@@ -59,6 +57,15 @@ function opus(): ModelRates {
   };
 }
 
+function opusLegacy(): ModelRates {
+  return {
+    inputPerMTok: 15,
+    outputPerMTok: 75,
+    cacheReadPerMTok: 1.5,
+    cacheCreationPerMTok: 18.75,
+  };
+}
+
 function sonnet(): ModelRates {
   return {
     inputPerMTok: 3,
@@ -66,6 +73,31 @@ function sonnet(): ModelRates {
     cacheReadPerMTok: 0.3,
     cacheCreationPerMTok: 3.75,
   };
+}
+
+function haiku(): ModelRates {
+  return {
+    inputPerMTok: 1,
+    outputPerMTok: 5,
+    cacheReadPerMTok: 0.1,
+    cacheCreationPerMTok: 1.25,
+  };
+}
+
+function fable(): ModelRates {
+  return {
+    inputPerMTok: 10,
+    outputPerMTok: 50,
+    cacheReadPerMTok: 1,
+    cacheCreationPerMTok: 12.5,
+  };
+}
+
+// Pre-4.6 model ids carry a -YYYYMMDD snapshot suffix in transcripts (the 4.6
+// generation switched to dateless ids). Strip it so a single dateless rate entry
+// prices both the alias and the dated snapshot.
+function normalizeModelId(model: string): string {
+  return model.replace(/-\d{8}$/, "");
 }
 
 function costForModel(usage: ModelUsage, rates: ModelRates): number {
@@ -86,7 +118,7 @@ export function cost(usage: UsageByModel, table: PricingTable): CostByModel {
   let hasUnknownModels = false;
 
   for (const [model, modelUsage] of Object.entries(usage.models)) {
-    const rates = table.rates[model];
+    const rates = table.rates[normalizeModelId(model)];
     if (rates === undefined) {
       hasUnknownModels = true;
       perModel.push({ model, costUsd: 0, known: false });
