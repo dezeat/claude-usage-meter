@@ -3,6 +3,35 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {} from "./aggregate.js";
 export const SCHEMA_VERSION = 1;
+function isLockedError(err) {
+    return err instanceof Error && err.message.toLowerCase().includes("locked");
+}
+// Block the thread for ms without busy-spinning. node:sqlite is synchronous, so
+// the WAL-switch retry cannot await a timer.
+function sleepSync(ms) {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+// Switching a fresh DB to WAL needs a brief exclusive lock. Two processes
+// opening the same new file at the same instant each hold a lock the other
+// needs, so SQLite returns SQLITE_BUSY *immediately* and deliberately skips the
+// busy handler to avoid the deadlock — busy_timeout cannot rescue this one. But
+// WAL is a persistent property of the file: once any process wins the switch,
+// every later open inherits it and the pragma is a no-op. So retry with jittered
+// backoff until a winner emerges (or it is already WAL).
+const WAL_SWITCH_ATTEMPTS = 50;
+function enableWal(db) {
+    for (let attempt = 0;; attempt++) {
+        try {
+            db.exec("PRAGMA journal_mode = WAL");
+            return;
+        }
+        catch (err) {
+            if (attempt >= WAL_SWITCH_ATTEMPTS - 1 || !isLockedError(err))
+                throw err;
+            sleepSync(5 + Math.floor(Math.random() * 20));
+        }
+    }
+}
 // The DB is the cross-session store, one row per Claude Code session keyed by
 // session_id (the transcript UUID). It replaces the rewritten index.json: a
 // whole-file writeFileSync raced across parallel worktree renders and dropped
@@ -13,11 +42,11 @@ export function openDb(dbPath) {
         mkdirSync(dirname(dbPath), { recursive: true });
     }
     const db = new DatabaseSync(dbPath);
-    // WAL lets concurrent worktree writers serialise rather than fail; the
-    // busy_timeout makes a contended writer wait for the lock instead of
-    // throwing SQLITE_BUSY immediately.
-    db.exec("PRAGMA journal_mode = WAL");
+    // busy_timeout makes contended writers wait for the WAL lock (writes
+    // serialise under WAL) instead of throwing SQLITE_BUSY. The WAL switch itself
+    // is a deadlock case the timeout can't cover, so it gets its own retry.
     db.exec("PRAGMA busy_timeout = 5000");
+    enableWal(db);
     // machine_id is reserved for a future cross-machine collector (S05 board
     // section 3). It is written NULL and never read by this story's code;
     // dropping it would require a schema migration.
