@@ -75,24 +75,72 @@ test("a full payload + index renders three rows labelled limits, spend, fleet in
   assert.match(rows[2] ?? "", /^fleet /);
 });
 
-test("the limits row carries ctx, 5h and 7d with percentages and countdowns", () => {
+test("the limits row leads with the model pin before ctx, 5h and 7d", () => {
   const limits = fullRender(false).split("\n")[0] ?? "";
+  // After the 6-wide gutter + 2-space gap, the first field is the model pin.
+  assert.match(limits, /^limits {2}opus · ctx /);
   assert.match(limits, /ctx .* 24%/);
   assert.match(limits, /5h .* 52% ⟳2h00m/);
   assert.match(limits, /7d .* 68% ⟳2d3h/);
 });
 
-test("the spend row carries the session tokens, the active class and the Σ total", () => {
+test("the spend row is cost-forward with mdl and Σ labels", () => {
   const spend = fullRender(false).split("\n")[1] ?? "";
-  assert.match(spend, /ses 1\.2M \$3\.45/);
-  assert.match(spend, /opus /);
-  assert.match(spend, /Σ /);
+  assert.match(spend, /ses \$3\.45 1\.2M/);
+  assert.match(spend, /mdl \$/);
+  assert.match(spend, /Σ \$/);
 });
 
-test("the fleet row carries the active class count and the live segment", () => {
+test("the fleet row carries the mdl count ratio with no mo and the active segment", () => {
   const fleet = fullRender(false).split("\n")[2] ?? "";
-  assert.match(fleet, /opus 1·1 mo/);
-  assert.match(fleet, /live ●1 opus/);
+  assert.match(fleet, /mdl 1\/1/);
+  assert.ok(!fleet.includes("mo"), "the mo qualifier is dropped");
+  // The current session is the only live opus → the active cell is omitted.
+  assert.ok(
+    !fleet.includes("active"),
+    "self-only live tally drops active cell",
+  );
+});
+
+test("multi-field rows join with a dot separator, none dangling", () => {
+  const rows = fullRender(false).split("\n");
+  // limits (pin · ctx · 5h · 7d) and spend (ses · mdl · Σ) carry separators;
+  // the fleet row here is a single self-excluded count cell, so no dot.
+  assert.ok((rows[0] ?? "").includes(" · "), "limits joins its fields");
+  assert.ok((rows[1] ?? "").includes(" · "), "spend joins its fields");
+  for (const row of rows) {
+    assert.ok(!row.endsWith(" · "), "no trailing separator");
+    assert.ok(!/^\S+ {2}· /.test(row), "no leading separator after the label");
+  }
+});
+
+test("fewer limit fields mean fewer separators with no dangling dot", () => {
+  const degraded = renderLine(
+    parsePayload(loadFixture("no-rate-limits-payload.json")),
+    fixtureNow,
+    { color: false },
+  );
+  const limits = degraded.split("\n")[0] ?? "";
+  // model pin · ctx — exactly one separator, none trailing.
+  const separators = limits.split(" · ").length - 1;
+  assert.equal(separators, 1, "pin · ctx is a single separator");
+  assert.ok(!limits.endsWith(" · "));
+});
+
+test("the model pin is painted brightWhite as the first limits field", () => {
+  const limits = fullRender(true).split("\n")[0] ?? "";
+  assert.ok(
+    limits.includes(`${ANSI.brightWhite}opus${ANSI.reset}`),
+    "the model pin is bright",
+  );
+});
+
+test("the cost is painted brightWhite ahead of its tokens in the spend row", () => {
+  const spend = fullRender(true).split("\n")[1] ?? "";
+  assert.ok(
+    spend.includes(`${ANSI.brightWhite}$3.45${ANSI.reset}`),
+    "the session cost is bright",
+  );
 });
 
 test("every bar colours by the flat rule for both context and the limit bars", () => {
@@ -143,13 +191,13 @@ test("an empty payload still renders a model fallback rather than throwing", () 
 });
 
 test("row labels pad to a common visible width with colour on and off", () => {
-  // Plain rows: the label prefix is exactly the 6-wide gutter ("limits").
+  // Plain rows: the label prefix is exactly the 6-wide gutter then a 2-space gap.
   for (const row of fullRender(false).split("\n")) {
     assert.equal(row.slice(0, 6).trimEnd().length <= 6, true);
     assert.equal(
-      row.charAt(6),
-      " ",
-      "a single space follows the 6-wide gutter",
+      row.slice(6, 8),
+      "  ",
+      "a 2-space gap follows the 6-wide gutter",
     );
   }
   // Painted rows: stripping the non-printing SGR codes recovers the same
@@ -160,6 +208,15 @@ test("row labels pad to a common visible width with colour on and off", () => {
       visibleLength(label),
       6,
       "visible gutter width is 6 with colour on",
+    );
+  }
+});
+
+test("row labels are painted accent", () => {
+  for (const row of fullRender(true).split("\n")) {
+    assert.ok(
+      row.startsWith(ANSI.accent),
+      "each row opens with the accent label colour",
     );
   }
 });

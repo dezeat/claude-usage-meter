@@ -5,9 +5,16 @@ export const ANSI = {
   yellow: "\x1b[33m",
   red: "\x1b[31m",
   brightWhite: "\x1b[97m",
+  accent: "\x1b[94m",
 } as const;
 
-export type ColorName = "green" | "yellow" | "red" | "brightWhite" | "dim";
+export type ColorName =
+  | "green"
+  | "yellow"
+  | "red"
+  | "brightWhite"
+  | "dim"
+  | "accent";
 
 export function paint(
   text: string,

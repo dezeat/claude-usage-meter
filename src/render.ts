@@ -13,7 +13,6 @@ import { type ParsedPayload, type RateWindow } from "./payload.js";
 
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
 
-const LIMIT_GAP = "   ";
 const ROW_LABELS = ["limits", "spend", "fleet"] as const;
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
 
@@ -21,6 +20,14 @@ interface RenderOptions {
   color?: boolean;
   index?: CrossSessionIndex | null;
   indexPath?: string;
+}
+
+// Join already-painted field cells with a two-tier separator: a dim middle-dot
+// flanked by spaces. Empty cells are dropped so an absent field leaves no
+// dangling separator. The same separator unifies every row.
+function joinFields(cells: string[], color: boolean): string {
+  const sep = ` ${paint("·", "dim", color)} `;
+  return cells.filter((c) => c !== "").join(sep);
 }
 
 function renderLimit(
@@ -38,8 +45,15 @@ function renderLimit(
   return `${label} ${bar} ${percentage} ${reset}`;
 }
 
-function limitsRow(payload: ParsedPayload, now: Date, color: boolean): string {
+function limitsCells(
+  payload: ParsedPayload,
+  now: Date,
+  color: boolean,
+): string[] {
   const cells: string[] = [];
+
+  const cls = activeClass(payload);
+  if (cls !== "unknown") cells.push(paint(cls, "brightWhite", color));
 
   if (payload.contextPercentage !== undefined) {
     const bar = contextBar(payload.contextPercentage, color);
@@ -56,7 +70,7 @@ function limitsRow(payload: ParsedPayload, now: Date, color: boolean): string {
     );
   }
 
-  return cells.join(LIMIT_GAP);
+  return cells;
 }
 
 // The active model class drives the spend/fleet scoping; derive it from the
@@ -70,7 +84,7 @@ function activeClass(payload: ParsedPayload): string {
 }
 
 function labelled(label: string, content: string, color: boolean): string {
-  return `${paint(padVisible(label, GUTTER), "dim", color)} ${content}`;
+  return `${paint(padVisible(label, GUTTER), "accent", color)}  ${content}`;
 }
 
 export function renderLine(
@@ -82,13 +96,13 @@ export function renderLine(
 
   const rows: string[] = [];
 
-  const limits = limitsRow(payload, now, color);
+  const limits = joinFields(limitsCells(payload, now, color), color);
   if (limits !== "") rows.push(labelled("limits", limits, color));
 
   const index = options.index ?? null;
   if (index !== null) {
     const month = now.toISOString().slice(0, 7);
-    const { spend, fleet } = renderFleet(
+    const { spendCells, fleetCells } = renderFleet(
       index,
       options.indexPath ?? "",
       activeClass(payload),
@@ -98,14 +112,16 @@ export function renderLine(
       color,
       { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath },
     );
+    const spend = joinFields(spendCells, color);
+    const fleet = joinFields(fleetCells, color);
     if (spend !== "") rows.push(labelled("spend", spend, color));
     if (fleet !== "") rows.push(labelled("fleet", fleet, color));
   } else if (payload.costUsd !== undefined) {
-    const ses = paint(
-      `ses $${payload.costUsd.toFixed(2)}`,
+    const ses = `${paint("ses", "dim", color)} ${paint(
+      `$${payload.costUsd.toFixed(2)}`,
       "brightWhite",
       color,
-    );
+    )}`;
     rows.push(labelled("spend", ses, color));
   }
 

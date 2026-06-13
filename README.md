@@ -37,7 +37,7 @@ cannot register the main statusLine; its own `settings.json` supports only
   "statusLine": {
     "type": "command",
     "command": "node /absolute/path/to/plugins/usage-meter/dist/statusline.js",
-    "refreshInterval": 3
+    "refreshInterval": 10
   }
 }
 ```
@@ -46,7 +46,7 @@ Use the absolute path to wherever this directory lives. On an
 API-billing account (no `rate_limits` in the payload) the line degrades
 to model + context + cost and never errors.
 
-`refreshInterval` (seconds, default `3`, minimum `1`) re-runs the command
+`refreshInterval` (seconds, default `10`, minimum `1`) re-runs the command
 on a fixed idle timer _in addition_ to Claude Code's events. Without it the
 line goes quiet between messages, so the reset countdowns and the live
 fleet counts freeze while you read or think; the timer keeps them ticking.
