@@ -19,7 +19,7 @@ telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 ```text
 limits  ctx ▓▓▓░░░░░ 40% · 5h ▓▓▓▓│▓░░░ 60% ⟳ 2h29m · 7d ▓▓▓│▓▓▓▓░ 85% ⟳ 4d15h
 spend   ses $3.45 1.2M · opus $156.93 180M · Σ $235.92 227M
-fleet   opus 9/23 · active ● opus 1
+fleet   opus 9 Σ 23 · active ● opus 1
 ```
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
@@ -29,23 +29,22 @@ fleet   opus 9/23 · active ● opus 1
 
 ## What each row shows
 
-| Row        | Reading                                                                                                                                                                                                                                                                     |
-| :--------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **limits** | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — limits are account-wide. |
-| **spend**  | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), the active **model class** this month, and **`Σ`**, the month total across every class.                                                                                                             |
-| **fleet**  | The active **model class** with its sessions **this month / month total** (`9/23`), then **`active`** — other sessions live right now per class, **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live.         |
+| Row        | Reading                                                                                                                                                                                                                                                                                                     |
+| :--------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **limits** | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — limits are account-wide.                                 |
+| **spend**  | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), the active **model class** this month, and **`Σ`**, the month total across every class.                                                                                                                                             |
+| **fleet**  | The active **model class**, its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class, **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live. |
 
 ### Glyphs
 
-| Glyph | Meaning                                                             |
-| :---- | :------------------------------------------------------------------ |
-| `▓ ░` | bar fill / empty                                                    |
-| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour |
-| `·`   | faint field separator                                               |
-| `/`   | "out of" — `9/23` reads as a score, never a decimal                 |
-| `●`   | green live-now marker, leads each live class in `active`            |
-| `Σ`   | month total across every model class                                |
-| `⟳`   | resets in…                                                          |
+| Glyph | Meaning                                                                  |
+| :---- | :----------------------------------------------------------------------- |
+| `▓ ░` | bar fill / empty                                                         |
+| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour      |
+| `·`   | faint field separator                                                    |
+| `●`   | green live-now marker, leads each live class in `active`                 |
+| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`) |
+| `⟳`   | resets in…                                                               |
 
 It **degrades cleanly**: with no `rate_limits` in the payload (for example on an
 API-billing account) the `limits` row is just `ctx`; with no index yet the

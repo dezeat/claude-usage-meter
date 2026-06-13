@@ -55,12 +55,13 @@ export function liveClassCounts(
 
 // The fleet row cells (board section 1): a count cell — the active model class
 // named (it is the row this model "owns", so the name lives here, not pinned on
-// the account-wide limits row) over its month session count and the month grand
-// total as `<class> <current>/<total>` (dim class label, ratio bright) —
-// followed, only when another session is live, by an `active` cell tallying live
-// sessions per class as `active ● <class> <n> …`. The current session is
-// excluded from the live tally (it is "besides you"), so the active cell
-// vanishes when nothing else is live.
+// the account-wide limits row), its month session count, a Σ connective, then
+// the month grand total across all classes: `<class> <current> Σ <total>`. The
+// class label and the Σ are dim (the Σ reads as a quiet connective, matching the
+// Σ on the spend row); the two counts are bright. Followed, only when another
+// session is live, by an `active` cell tallying live sessions per class as
+// `active ● <class> <n> …`. The current session is excluded from the live tally
+// (it is "besides you"), so the active cell vanishes when nothing else is live.
 export function renderRoster(
   index: CrossSessionIndex,
   currentClass: string,
@@ -76,10 +77,10 @@ export function renderRoster(
     monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
 
   const countCell = `${paint(currentClass, "dim", color)} ${paint(
-    `${currentCount}/${total}`,
+    `${currentCount}`,
     "brightWhite",
     color,
-  )}`;
+  )} ${paint("Σ", "dim", color)} ${paint(`${total}`, "brightWhite", color)}`;
 
   const live = liveClassCounts(index.sessions, nowMs, excludeSessionId);
   if (live.length === 0) return [countCell];

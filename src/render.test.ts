@@ -91,10 +91,11 @@ test("the spend row is cost-forward with the model class and Σ labels", () => {
   assert.match(spend, /Σ \$/);
 });
 
-test("the fleet row leads with the model class count ratio, no mo, plus active", () => {
+test("the fleet row leads with the model class count Σ total, no mo, plus active", () => {
   const fleet = fullRender(false).split("\n")[2] ?? "";
-  assert.match(fleet, /opus 1\/1/);
+  assert.match(fleet, /opus 1 Σ 1/);
   assert.ok(!fleet.includes("mo"), "the mo qualifier is dropped");
+  assert.ok(!fleet.includes("/"), "the count cell uses ' Σ ', never a slash");
   // The current session is the only live opus → the active cell is omitted.
   assert.ok(
     !fleet.includes("active"),
