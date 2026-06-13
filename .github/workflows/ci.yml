@@ -11,9 +11,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # node:sqlite (D-012) lands in 22.5 — the engines floor — so prove the
-        # floor still works alongside current LTS and the next major.
-        node: ["22.5", "22", "24"]
+        # node:sqlite is available without a flag from 22.13 (the engines floor)
+        # and 23.4 on the current line — prove the floor, current LTS, next major.
+        node: ["22.13", "22", "24"]
     name: check (node ${{ matrix.node }})
     steps:
       - uses: actions/checkout@v4
