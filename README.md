@@ -54,9 +54,10 @@ half-empty, and the line never errors.
 
 ## Requirements
 
-- **Node.js ≥ 22.5** — the only hard floor. The cross-session store uses the
-  built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module, which
-  first shipped in 22.5. There is **no `better-sqlite3`** and no native build
+- **Node.js ≥ 22.13** — the only hard floor. The cross-session store uses the
+  built-in [`node:sqlite`](https://nodejs.org/api/sqlite.html) module, available
+  without a flag since 22.13 (23.4 on the current line). There is **no
+  `better-sqlite3`** and no native build
   step; zero runtime dependencies is a design goal.
 - Claude Code (the statusline integration uses the `rate_limits` payload and the
   `refreshInterval` setting).

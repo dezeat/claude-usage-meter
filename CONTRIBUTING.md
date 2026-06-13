@@ -8,7 +8,7 @@ focused tool — contributions that keep it that way are very welcome.
 - **Zero runtime dependencies.** The only allowed runtime dependency is the Node
   built-in `node:sqlite`. No `better-sqlite3`, no network calls, no telemetry —
   these are design constraints, not preferences.
-- **Node ≥ 22.5** (`node:sqlite`).
+- **Node ≥ 22.13** (`node:sqlite`).
 - **Conventional Commits** (`feat:`, `fix:`, `docs:`, `refactor:`, `test:`,
   `chore:`), one logical change per commit.
 
@@ -27,7 +27,7 @@ npm run check    # typecheck + lint + format check + build + tests — must be g
   manifests.
 
 The pre-commit hook runs lint-staged + typecheck; pre-push runs the full
-`npm run check`. CI runs `npm run check` on Node 22.5, 22, and 24.
+`npm run check`. CI runs `npm run check` on Node 22.13, 22, and 24.
 
 ## Tests
 
