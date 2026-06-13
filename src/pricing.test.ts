@@ -2,7 +2,21 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { type UsageByModel } from "./aggregate.js";
-import { cost, type PricingTable } from "./pricing.js";
+import { cost, DEFAULT_PRICING, type PricingTable } from "./pricing.js";
+
+function oneMillionInput(model: string): UsageByModel {
+  return {
+    models: {
+      [model]: {
+        inputTokens: 1_000_000,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      },
+    },
+    skippedLines: 0,
+  };
+}
 
 const table: PricingTable = {
   asOf: "2026-01-01",
@@ -64,4 +78,37 @@ test("an unknown model is flagged, priced at zero, and left out of the total", (
   assert.equal(mystery?.known, false);
   assert.equal(mystery?.costUsd, 0);
   assert.equal(result.totalUsd, 5); // only model-a's 1M input tokens at $5
+});
+
+test("current Opus bills 1M input tokens at its $5 rate", () => {
+  const result = cost(oneMillionInput("claude-opus-4-8"), DEFAULT_PRICING);
+  assert.equal(result.totalUsd, 5);
+  assert.equal(result.hasUnknownModels, false);
+});
+
+test("a date-suffixed model id is priced via its dateless alias", () => {
+  const result = cost(
+    oneMillionInput("claude-haiku-4-5-20251001"),
+    DEFAULT_PRICING,
+  );
+  assert.equal(result.totalUsd, 1); // Haiku 4.5 input is $1/MTok
+  assert.equal(result.perModel[0]?.known, true);
+});
+
+test("deprecated Opus 4.1 keeps its legacy $15 input rate, not the current $5", () => {
+  assert.equal(
+    cost(oneMillionInput("claude-opus-4-1"), DEFAULT_PRICING).totalUsd,
+    15,
+  );
+  assert.equal(
+    cost(oneMillionInput("claude-opus-4-1-20250805"), DEFAULT_PRICING).totalUsd,
+    15,
+  );
+});
+
+test("Mythos 5 is priced at the same rate as Fable 5", () => {
+  assert.equal(
+    cost(oneMillionInput("claude-mythos-5"), DEFAULT_PRICING).totalUsd,
+    10,
+  );
 });
