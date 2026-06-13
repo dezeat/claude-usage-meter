@@ -7,6 +7,8 @@ import {
   formatCountdown,
   paceBar,
 } from "./bars.js";
+import { renderFleet } from "./fleet-render.js";
+import { type CrossSessionIndex, modelClass } from "./index-store.js";
 import { type ParsedPayload, type RateWindow } from "./payload.js";
 
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
@@ -15,6 +17,7 @@ const SEPARATOR = "  ";
 
 interface RenderOptions {
   color?: boolean;
+  index?: CrossSessionIndex | null;
 }
 
 function renderLimit(
@@ -60,6 +63,23 @@ export function renderLine(
 
   if (payload.costUsd !== undefined) {
     segments.push(paint(`$${payload.costUsd.toFixed(2)}`, "dim", color));
+  }
+
+  const index = options.index ?? null;
+  if (index !== null) {
+    const cls = payload.modelId
+      ? modelClass(payload.modelId)
+      : (payload.modelName?.toLowerCase() ?? "unknown");
+    const month = now.toISOString().slice(0, 7);
+    const fleet = renderFleet(
+      index,
+      cls,
+      payload.costUsd,
+      month,
+      now.getTime(),
+      color,
+    );
+    return `${segments.join(SEPARATOR)}  ·  ${fleet}`;
   }
 
   return segments.join(SEPARATOR);

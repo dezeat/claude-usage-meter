@@ -4,6 +4,7 @@ export interface RateWindow {
 }
 
 export interface ParsedPayload {
+  modelId?: string;
   modelName?: string;
   contextPercentage?: number;
   costUsd?: number;
@@ -43,6 +44,7 @@ export function parsePayload(value: unknown): ParsedPayload {
   const context = asRecord(root.context_window);
   const limits = asRecord(root.rate_limits);
   return {
+    modelId: model ? asString(model.id) : undefined,
     modelName: model ? asString(model.display_name) : undefined,
     contextPercentage: context ? asNumber(context.used_percentage) : undefined,
     costUsd: cost ? asNumber(cost.total_cost_usd) : undefined,

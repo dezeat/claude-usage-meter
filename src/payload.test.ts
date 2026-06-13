@@ -61,6 +61,7 @@ test("wrong-typed fields are ignored, not coerced", () => {
 
 test("a non-object payload parses to an empty result", () => {
   assert.deepEqual(parsePayload(null), {
+    modelId: undefined,
     modelName: undefined,
     contextPercentage: undefined,
     costUsd: undefined,
