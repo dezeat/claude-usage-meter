@@ -75,25 +75,25 @@ test("a full payload + index renders three rows labelled limits, spend, fleet in
   assert.match(rows[2] ?? "", /^fleet /);
 });
 
-test("the limits row leads with the model pin before ctx, 5h and 7d", () => {
+test("the limits row starts with ctx — the model is no longer pinned here", () => {
   const limits = fullRender(false).split("\n")[0] ?? "";
-  // After the 6-wide gutter + 2-space gap, the first field is the model pin.
-  assert.match(limits, /^limits {2}opus · ctx /);
+  assert.match(limits, /^limits {2}ctx /);
+  assert.ok(!/^limits {2}opus/.test(limits), "no model pin on the limits row");
   assert.match(limits, /ctx .* 24%/);
-  assert.match(limits, /5h .* 52% ⟳2h00m/);
-  assert.match(limits, /7d .* 68% ⟳2d3h/);
+  assert.match(limits, /5h .* 52% ⟳ 2h00m/);
+  assert.match(limits, /7d .* 68% ⟳ 2d3h/);
 });
 
-test("the spend row is cost-forward with mdl and Σ labels", () => {
+test("the spend row is cost-forward with the model class and Σ labels", () => {
   const spend = fullRender(false).split("\n")[1] ?? "";
   assert.match(spend, /ses \$3\.45 1\.2M/);
-  assert.match(spend, /mdl \$/);
+  assert.match(spend, /opus \$/);
   assert.match(spend, /Σ \$/);
 });
 
-test("the fleet row carries the mdl count ratio with no mo and the active segment", () => {
+test("the fleet row leads with the model class count ratio, no mo, plus active", () => {
   const fleet = fullRender(false).split("\n")[2] ?? "";
-  assert.match(fleet, /mdl 1\/1/);
+  assert.match(fleet, /opus 1\/1/);
   assert.ok(!fleet.includes("mo"), "the mo qualifier is dropped");
   // The current session is the only live opus → the active cell is omitted.
   assert.ok(
@@ -104,7 +104,7 @@ test("the fleet row carries the mdl count ratio with no mo and the active segmen
 
 test("multi-field rows join with a dot separator, none dangling", () => {
   const rows = fullRender(false).split("\n");
-  // limits (pin · ctx · 5h · 7d) and spend (ses · mdl · Σ) carry separators;
+  // limits (ctx · 5h · 7d) and spend (ses · opus · Σ) carry separators;
   // the fleet row here is a single self-excluded count cell, so no dot.
   assert.ok((rows[0] ?? "").includes(" · "), "limits joins its fields");
   assert.ok((rows[1] ?? "").includes(" · "), "spend joins its fields");
@@ -121,18 +121,10 @@ test("fewer limit fields mean fewer separators with no dangling dot", () => {
     { color: false },
   );
   const limits = degraded.split("\n")[0] ?? "";
-  // model pin · ctx — exactly one separator, none trailing.
+  // Only ctx remains (no pin, no 5h/7d) → no field separator at all.
   const separators = limits.split(" · ").length - 1;
-  assert.equal(separators, 1, "pin · ctx is a single separator");
+  assert.equal(separators, 0, "ctx alone has no separator");
   assert.ok(!limits.endsWith(" · "));
-});
-
-test("the model pin is painted brightWhite as the first limits field", () => {
-  const limits = fullRender(true).split("\n")[0] ?? "";
-  assert.ok(
-    limits.includes(`${ANSI.brightWhite}opus${ANSI.reset}`),
-    "the model pin is bright",
-  );
 });
 
 test("the cost is painted brightWhite ahead of its tokens in the spend row", () => {

@@ -41,7 +41,7 @@ function renderLimit(
   const bar = paceBar(window.usedPercentage, fraction, color);
   const percentage = `${Math.round(window.usedPercentage)}%`;
   const remainingSeconds = window.resetsAt - now.getTime() / 1000;
-  const reset = paint(`⟳${formatCountdown(remainingSeconds)}`, "dim", color);
+  const reset = paint(`⟳ ${formatCountdown(remainingSeconds)}`, "dim", color);
   return `${label} ${bar} ${percentage} ${reset}`;
 }
 
@@ -51,9 +51,6 @@ function limitsCells(
   color: boolean,
 ): string[] {
   const cells: string[] = [];
-
-  const cls = activeClass(payload);
-  if (cls !== "unknown") cells.push(paint(cls, "brightWhite", color));
 
   if (payload.contextPercentage !== undefined) {
     const bar = contextBar(payload.contextPercentage, color);

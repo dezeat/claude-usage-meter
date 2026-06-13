@@ -53,12 +53,14 @@ export function liveClassCounts(
   return sortClassCounts(counts);
 }
 
-// The fleet row cells (board section 1): a count cell — the active class's
-// month session count over the month grand total as `mdl <current>/<total>`
-// (the dim `mdl` label, the ratio bright) — followed, only when another session
-// is live, by an `active` cell tallying live sessions per class as
-// `active ● <class> <n> …`. The current session is excluded from the live tally
-// (it is "besides you"), so the active cell vanishes when nothing else is live.
+// The fleet row cells (board section 1): a count cell — the active model class
+// named (it is the row this model "owns", so the name lives here, not pinned on
+// the account-wide limits row) over its month session count and the month grand
+// total as `<class> <current>/<total>` (dim class label, ratio bright) —
+// followed, only when another session is live, by an `active` cell tallying live
+// sessions per class as `active ● <class> <n> …`. The current session is
+// excluded from the live tally (it is "besides you"), so the active cell
+// vanishes when nothing else is live.
 export function renderRoster(
   index: CrossSessionIndex,
   currentClass: string,
@@ -73,7 +75,7 @@ export function renderRoster(
   const currentCount =
     monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
 
-  const countCell = `${paint("mdl", "dim", color)} ${paint(
+  const countCell = `${paint(currentClass, "dim", color)} ${paint(
     `${currentCount}/${total}`,
     "brightWhite",
     color,
@@ -99,10 +101,10 @@ export interface MonthlySpend {
 
 // The active class's accumulated spend this month and the month Σ total, as two
 // cost-forward spend-row cells (`<label> $<cost> <tokens>`): the dim label, the
-// bright cost, the dim token count. The active cell's literal label is `mdl`
-// (not the class name), Σ counts every class including ones not shown
-// individually. A zero for the active class is meaningful (nothing spent on it
-// yet this month), so it renders `mdl $0.00 0` rather than being omitted.
+// bright cost, the dim token count. The active cell is labelled with the model
+// class name; Σ counts every class including ones not shown individually. A zero
+// for the active class is meaningful (nothing spent on it yet this month), so it
+// renders `<class> $0.00 0` rather than being omitted.
 export function renderMonthly(
   indexPath: string,
   activeClass: string,
@@ -114,7 +116,7 @@ export function renderMonthly(
 
   return {
     active: costForward(
-      "mdl",
+      activeClass,
       active.costUsd,
       humanTokens(active.tokens),
       color,
