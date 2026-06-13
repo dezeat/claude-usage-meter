@@ -8,6 +8,8 @@ import {
   foldLines,
   discoverTranscriptPaths,
   updateIndex,
+  updateSession,
+  readIndex,
   monthTotals,
   branchTotals,
   sessionTotals,
@@ -794,6 +796,93 @@ test("monthClassSpend slices a month's tokens+cost per class with Σ summed over
     "Σ tokens over all classes",
   );
   assert.strictEqual(spend.total.costUsd, 11, "Σ cost over all classes");
+});
+
+test("updateSession persists one session from its transcript path alone, with no project sweep", async () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "index.db");
+  // A transcript sitting on its own — NOT under any discoverable claudeDir — proving
+  // the event write indexes by explicit path, not via the cross-project sweep.
+  const transcript = writeJsonl(tmp, "solo.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 1_000_000,
+      output: 0,
+    }),
+  ]);
+
+  updateSession(dbPath, transcript, DEFAULT_PRICING);
+
+  const index = await readIndex(dbPath);
+  assert.ok(index, "the store exists and holds the one persisted session");
+  assert.deepStrictEqual(Object.keys(index.sessions), ["solo"]);
+  // Opus 4.8 input is $5 / 1M tokens (published pricing) → 1M input = $5.00.
+  assert.strictEqual(index.sessions["solo"]?.costUsd, 5);
+});
+
+test("updateSession folds only new bytes on a later call and never touches other sessions", async () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "index.db");
+
+  // A different session already in the store; updateSession must leave it untouched.
+  const other = writeJsonl(tmp, "other.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T09:00:00.000Z",
+      branch: "main",
+      reqId: "rO",
+      msgId: "mO",
+      model: "claude-sonnet-4-6",
+      input: 1000,
+      output: 0,
+    }),
+  ]);
+  updateSession(dbPath, other, DEFAULT_PRICING);
+
+  const target = writeJsonl(tmp, "target.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 400_000,
+      output: 0,
+    }),
+  ]);
+  updateSession(dbPath, target, DEFAULT_PRICING);
+
+  // Append a second turn, then write again: only the new bytes fold in.
+  const extra = assistantLine({
+    ts: "2026-06-13T10:05:00.000Z",
+    branch: "main",
+    reqId: "r2",
+    msgId: "m2",
+    model: "claude-opus-4-8",
+    input: 600_000,
+    output: 0,
+  });
+  writeFileSync(target, readFileSync(target, "utf8") + extra + "\n");
+
+  resetUpsertCountForTest();
+  updateSession(dbPath, target, DEFAULT_PRICING);
+  assert.strictEqual(
+    upsertCountForTest(),
+    1,
+    "exactly the one targeted session is upserted",
+  );
+
+  const index = await readIndex(dbPath);
+  assert.ok(index);
+  assert.strictEqual(
+    index.sessions["target"]?.tokens["claude-opus-4-8"]?.inputTokens,
+    1_000_000,
+    "the target's cumulative tokens reflect both turns",
+  );
+  assert.ok(index.sessions["other"], "the other session is left untouched");
 });
 
 test("discovery spans every project, not a single hardcoded project name", () => {

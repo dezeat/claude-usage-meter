@@ -192,77 +192,95 @@ export function upsertCountForTest() {
 export function resetUpsertCountForTest() {
     upsertCount = 0;
 }
+// Incrementally fold one transcript file into its store row. Reads only the bytes
+// past the stored offset, advances to the last complete line, and persists with the
+// single atomic upsert. The row key is the file basename (the session UUID for a
+// top-level transcript), not the path — a session has one stable id across
+// worktrees, so its offset and tokens live on one row wherever the file is found. A
+// missing/unreadable file, or a chunk with no newline yet, is a no-op: nothing is
+// written and the offset does not move. Returns true when a row was upserted — the
+// debounce signal the read-only-tick invariant below rests on.
+function upsertTranscript(db, transcriptPath, pricingTable) {
+    const sessionId = basename(transcriptPath, ".jsonl");
+    const existingRow = getSession(db, sessionId);
+    const existing = existingRow === undefined ? undefined : rowToRecord(existingRow);
+    const currentOffset = existing?.byteOffset ?? 0;
+    let fileSize;
+    try {
+        fileSize = statSync(transcriptPath).size;
+    }
+    catch {
+        return false;
+    }
+    if (fileSize <= currentOffset)
+        return false;
+    // Read the whole file as a buffer so we can slice by byte offset without
+    // misinterpreting multibyte UTF-8 characters as character offsets.
+    let fileBuf;
+    try {
+        fileBuf = readFileSync(transcriptPath);
+    }
+    catch {
+        return false;
+    }
+    const chunk = fileBuf.subarray(currentOffset).toString("utf8");
+    // Newline-boundary safety: never fold a partial trailing line. Advance the byte
+    // offset only to the position of the last \n in the chunk, so a line that was
+    // mid-write when we read it is left intact for the next update.
+    const lastNewline = chunk.lastIndexOf("\n");
+    if (lastNewline === -1)
+        return false;
+    const safeChunk = chunk.slice(0, lastNewline + 1);
+    const newOffset = currentOffset + Buffer.byteLength(safeChunk, "utf8");
+    const lines = safeChunk.split("\n");
+    const folded = foldLines(existing, lines, new Set());
+    const usageByModel = { models: folded.tokens, skippedLines: 0 };
+    const costs = cost(usageByModel, pricingTable);
+    upsertSession(db, {
+        sessionId,
+        path: transcriptPath,
+        branch: folded.branch,
+        modelClass: folded.modelClass,
+        tokens: folded.tokens,
+        costUsd: costs.totalUsd,
+        lastTs: folded.lastTs,
+        byteOffset: newOffset,
+        month: monthFor(folded.lastTs),
+    });
+    upsertCount += 1;
+    return true;
+}
 export async function updateIndex(indexPath, claudeDir, pricingTable) {
     const db = openDb(indexPath);
     const transcripts = discoverTranscriptPaths(claudeDir);
-    // Read-only tick invariant: the per-file `fileSize <= currentOffset` skip
-    // below is the debounce — when the statusline re-runs on its idle
-    // refreshInterval and no transcript has grown past its stored byte_offset,
-    // every file is skipped, no branch reaches upsertSession, and the function
-    // returns the rollups materialised purely from a read. Live counts stay
-    // correct because they recompute from each row's stored last_ts against the
-    // current clock downstream, so a session can age out of the liveness window
-    // with no new bytes and no write.
+    // Read-only tick invariant: the per-file `fileSize <= currentOffset` skip inside
+    // upsertTranscript is the debounce — when the statusline re-runs on its idle
+    // refreshInterval and no transcript has grown past its stored byte_offset, every
+    // file is skipped, nothing reaches upsertSession, and the function returns the
+    // rollups materialised purely from a read. Live counts stay correct because they
+    // recompute from each row's stored last_ts against the current clock downstream,
+    // so a session can age out of the liveness window with no new bytes and no write.
     for (const transcriptPath of transcripts) {
-        // Row key is the session_id (transcript UUID), not the path: a session has
-        // one stable id across worktrees, so its incremental byte_offset and tokens
-        // live on one row regardless of where the file is discovered.
-        const sessionId = basename(transcriptPath, ".jsonl");
-        const existingRow = getSession(db, sessionId);
-        const existing = existingRow === undefined ? undefined : rowToRecord(existingRow);
-        const currentOffset = existing?.byteOffset ?? 0;
-        let fileSize;
-        try {
-            fileSize = statSync(transcriptPath).size;
-        }
-        catch {
-            continue;
-        }
-        if (fileSize <= currentOffset)
-            continue;
-        // Read the whole file as a buffer so we can slice by byte offset without
-        // misinterpreting multibyte UTF-8 characters as character offsets.
-        let fileBuf;
-        try {
-            fileBuf = readFileSync(transcriptPath);
-        }
-        catch {
-            continue;
-        }
-        const chunk = fileBuf.subarray(currentOffset).toString("utf8");
-        // Newline-boundary safety: never fold a partial trailing line. Advance the
-        // byte offset only to the position of the last \n in the chunk, so a line
-        // that was mid-write when we read it is left intact for the next update.
-        const lastNewline = chunk.lastIndexOf("\n");
-        if (lastNewline === -1)
-            continue;
-        const safeChunk = chunk.slice(0, lastNewline + 1);
-        const newOffset = currentOffset + Buffer.byteLength(safeChunk, "utf8");
-        const lines = safeChunk.split("\n");
-        const seenKeys = new Set(existing
-            ? Object.keys(existing.tokens)
-                .map(() => "")
-                .filter(() => false)
-            : []);
-        const folded = foldLines(existing, lines, seenKeys);
-        const usageByModel = { models: folded.tokens, skippedLines: 0 };
-        const costs = cost(usageByModel, pricingTable);
-        upsertSession(db, {
-            sessionId,
-            path: transcriptPath,
-            branch: folded.branch,
-            modelClass: folded.modelClass,
-            tokens: folded.tokens,
-            costUsd: costs.totalUsd,
-            lastTs: folded.lastTs,
-            byteOffset: newOffset,
-            month: monthFor(folded.lastTs),
-        });
-        upsertCount += 1;
+        upsertTranscript(db, transcriptPath, pricingTable);
     }
     const index = materializeIndex(allSessions(db), Date.now());
     db.close();
     return index;
+}
+// Event-driven write (ADR-0003): persist just one session from its transcript path,
+// without the cross-project sweep updateIndex does. The Stop hook calls this so a
+// session records itself on every turn-end even when no statusline is ticking for
+// it; other sessions pick it up on their next refresh. Concurrency-safe — it is the
+// same single atomic per-row upsert — and openDb creates the store on first write.
+// It never materialises an index; the hook has no use for one.
+export function updateSession(indexPath, transcriptPath, pricingTable) {
+    const db = openDb(indexPath);
+    try {
+        upsertTranscript(db, transcriptPath, pricingTable);
+    }
+    finally {
+        db.close();
+    }
 }
 export async function readIndex(indexPath) {
     let rows;
