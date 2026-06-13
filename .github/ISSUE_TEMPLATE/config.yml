@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Design discussion / open question
+    url: https://github.com/dezeat/claude-usage-meter/discussions
+    about: Design debate, knowledge, and open questions live in Discussions — not issues.
+  - name: Decision record (ADR)
+    url: https://github.com/dezeat/claude-usage-meter/tree/main/docs/decisions
+    about: Binding decisions are short ADRs in the repo; the rationale goes in a Decisions Discussion.
