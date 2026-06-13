@@ -1,5 +1,5 @@
 import { readFileSync, statSync, readdirSync, type Dirent } from "node:fs";
-import { join, basename } from "node:path";
+import { join, basename, dirname } from "node:path";
 
 import { aggregateTranscript, type ModelUsage } from "./aggregate.js";
 import { cost, type PricingTable } from "./pricing.js";
@@ -25,6 +25,10 @@ export interface SessionRecord {
   costUsd: number;
   lastTs: number;
   byteOffset: number;
+  // The parent session id when this record is a subagent transcript; undefined for
+  // a top-level session (ADR-0001). Count/live tallies skip child records; spend
+  // and sessionTotals roll them into the parent.
+  parentSessionId?: string;
 }
 
 export interface CrossSessionIndex {
@@ -51,6 +55,17 @@ export function modelClass(modelId: string): string {
     if (modelId.includes(cls)) return cls;
   }
   return modelId;
+}
+
+// The parent session id of a subagent transcript, read off its path: Claude Code
+// writes subagent turns to <project>/<PARENT_SESSION_ID>/subagents/<file>.jsonl
+// (ADR-0001), so the parent id is the directory two levels up. Returns undefined for
+// a top-level transcript (anything not directly under a `subagents` directory). Pure
+// — the path carries the link, so no file read is needed to attribute a child.
+export function parentSessionIdOf(transcriptPath: string): string | undefined {
+  const dir = dirname(transcriptPath);
+  if (basename(dir) !== "subagents") return undefined;
+  return basename(dirname(dir));
 }
 
 function emptyUsage(): ModelUsage {
@@ -191,11 +206,36 @@ export function discoverTranscriptPaths(claudeDir: string): string[] {
     for (const entry of entries) {
       if (entry.isFile() && entry.name.endsWith(".jsonl")) {
         paths.push(join(dir, entry.name));
+      } else if (entry.isDirectory()) {
+        // A session's subagent transcripts live one known level down, in
+        // <session>/subagents/*.jsonl (ADR-0001). Descend into exactly that
+        // directory — not a general recursive walk.
+        for (const sub of subagentFilesIn(join(dir, entry.name))) {
+          paths.push(sub);
+        }
       }
     }
   }
 
   return paths;
+}
+
+// The subagent transcript files under one session directory, i.e. the
+// <sessionDir>/subagents/*.jsonl set. Empty when there is no subagents/ dir.
+function subagentFilesIn(sessionDir: string): string[] {
+  const subagentsDir = join(sessionDir, "subagents");
+  let entries: Dirent<string>[];
+  try {
+    entries = readdirSync(subagentsDir, {
+      withFileTypes: true,
+      encoding: "utf8",
+    });
+  } catch {
+    return [];
+  }
+  return entries
+    .filter((e) => e.isFile() && e.name.endsWith(".jsonl"))
+    .map((e) => join(subagentsDir, e.name));
 }
 
 function rowToRecord(row: SessionRow): SessionRecord {
@@ -208,6 +248,7 @@ function rowToRecord(row: SessionRow): SessionRecord {
     costUsd: row.costUsd,
     lastTs: row.lastTs,
     byteOffset: row.byteOffset,
+    parentSessionId: row.parentSessionId ?? undefined,
   };
 }
 
@@ -322,6 +363,7 @@ function upsertTranscript(
     lastTs: folded.lastTs,
     byteOffset: newOffset,
     month: monthFor(folded.lastTs),
+    parentSessionId: parentSessionIdOf(transcriptPath) ?? null,
   });
   upsertCount += 1;
   return true;
@@ -366,6 +408,17 @@ export function updateSession(
   const db = openDb(indexPath);
   try {
     upsertTranscript(db, transcriptPath, pricingTable);
+    // Fold this session's subagent transcripts too, so the Stop write credits the
+    // parent's children on the same turn-end (ADR-0001/0003). They sit in a sibling
+    // <session>/subagents/ dir derived from the main transcript path; each is its
+    // own row, attributed to the parent via parentSessionIdOf.
+    const sessionDir = join(
+      dirname(transcriptPath),
+      basename(transcriptPath, ".jsonl"),
+    );
+    for (const sub of subagentFilesIn(sessionDir)) {
+      upsertTranscript(db, sub, pricingTable);
+    }
   } finally {
     db.close();
   }
@@ -423,20 +476,29 @@ export function sessionTotals(
   sessionId: string | undefined,
   transcriptPath: string | undefined,
 ): { tokens: Record<string, ModelUsage>; costUsd: number } | undefined {
+  let owner: SessionRecord | undefined;
   if (sessionId !== undefined) {
-    const record = index.sessions[sessionId];
-    return record === undefined
-      ? undefined
-      : { tokens: record.tokens, costUsd: record.costUsd };
+    owner = index.sessions[sessionId];
+  } else if (transcriptPath !== undefined) {
+    owner = Object.values(index.sessions).find(
+      (r) => r.path === transcriptPath,
+    );
   }
-  if (transcriptPath !== undefined) {
-    for (const record of Object.values(index.sessions)) {
-      if (record.path === transcriptPath) {
-        return { tokens: record.tokens, costUsd: record.costUsd };
-      }
+  if (owner === undefined) return undefined;
+
+  // Roll the session's subagents into its total (ADR-0002): a parent's spend
+  // includes its children's tokens and cost. Returns a fresh merged object, never
+  // the stored record's own token map.
+  const tokens: Record<string, ModelUsage> = {};
+  mergeTokens(tokens, owner.tokens);
+  let costUsd = owner.costUsd;
+  for (const rec of Object.values(index.sessions)) {
+    if (rec.parentSessionId === owner.sessionId) {
+      mergeTokens(tokens, rec.tokens);
+      costUsd += rec.costUsd;
     }
   }
-  return undefined;
+  return { tokens, costUsd };
 }
 
 // The YYYY-MM a timestamp falls in, matching the `month` column written by the

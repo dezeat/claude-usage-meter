@@ -145,6 +145,7 @@ upsertSession(db, {
   lastTs: Date.UTC(2026, 5, 13),
   byteOffset: 10,
   month: "2026-06",
+  parentSessionId: null,
 });
 db.close();
 `,
@@ -242,6 +243,7 @@ function seedSession(
   modelClass: string,
   month: string,
   lastTs: number,
+  parentSessionId: string | null = null,
 ): void {
   const row: SessionRow = {
     sessionId: id,
@@ -253,6 +255,7 @@ function seedSession(
     lastTs,
     byteOffset: 0,
     month,
+    parentSessionId,
   };
   upsertSession(db, row);
 }
@@ -312,6 +315,70 @@ test("live counting is independent of month — an across-rollover session still
     "and belongs to June's month count",
   );
   assert.strictEqual(julyCounts.get("opus"), undefined, "not counted in July");
+});
+
+test("subagent rows (parent_session_id set) are excluded from month and live session counts", () => {
+  const db = openDb(":memory:");
+  const ts = Date.UTC(2026, 5, 10);
+  seedSession(db, "parent", "opus", "2026-06", ts);
+  // A haiku subagent under the opus parent: real spend, but not a session.
+  seedSession(db, "agent-x", "haiku", "2026-06", ts, "parent");
+
+  const counts = countSessionsByClassForMonth(db, "2026-06");
+  const live = countLiveSessionsByClass(db, ts + 60 * 1000, LIVENESS_WINDOW_MS);
+  db.close();
+
+  assert.strictEqual(counts.get("opus"), 1, "the parent session is counted");
+  assert.strictEqual(
+    counts.get("haiku"),
+    undefined,
+    "the subagent is not counted as a session",
+  );
+  assert.strictEqual(live.get("opus"), 1);
+  assert.strictEqual(
+    live.get("haiku"),
+    undefined,
+    "the subagent is not counted as a live session",
+  );
+});
+
+test("opening an existing v1 store migrates it to v2 in place, adding parent_session_id and preserving rows", () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "v1.db");
+
+  // Hand-build a v1 store: the old schema (no parent_session_id) at user_version 1.
+  const v1 = new DatabaseSync(dbPath);
+  v1.exec("PRAGMA journal_mode = WAL");
+  v1.exec(
+    `CREATE TABLE sessions (
+       session_id TEXT PRIMARY KEY, path TEXT NOT NULL, branch TEXT,
+       model_class TEXT, cost_usd REAL, last_ts INTEGER,
+       byte_offset INTEGER NOT NULL, month TEXT, tokens_json TEXT, machine_id TEXT)`,
+  );
+  v1.prepare(
+    "INSERT INTO sessions (session_id, path, byte_offset, model_class, month) VALUES (?, ?, ?, ?, ?)",
+  ).run("old", "/fake/old.jsonl", 5, "opus", "2026-06");
+  v1.exec("PRAGMA user_version = 1");
+  v1.close();
+
+  const db = openDb(dbPath);
+  assert.strictEqual(schemaVersion(db), 2, "the store is migrated to v2");
+  const cols = (
+    db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>
+  ).map((c) => c.name);
+  assert.ok(cols.includes("parent_session_id"), "the new column was added");
+  const row = db
+    .prepare(
+      "SELECT session_id, parent_session_id FROM sessions WHERE session_id = ?",
+    )
+    .get("old") as { session_id: string; parent_session_id: string | null };
+  assert.strictEqual(row.session_id, "old", "the pre-existing row survived");
+  assert.strictEqual(
+    row.parent_session_id,
+    null,
+    "and is treated as top-level",
+  );
+  db.close();
 });
 
 test("an in-memory DatabaseSync store upserts and reads back a session row", () => {
