@@ -65,7 +65,12 @@ async function buildSpendDb(
 }
 
 function makeIndex(
-  sessions: Array<{ modelClass: string; lastTs: number; costUsd: number }>,
+  sessions: Array<{
+    modelClass: string;
+    lastTs: number;
+    costUsd: number;
+    parentSessionId?: string;
+  }>,
   monthCostUsd: number,
 ): CrossSessionIndex {
   const sessionsRecord: CrossSessionIndex["sessions"] = {};
@@ -80,6 +85,7 @@ function makeIndex(
       costUsd: s.costUsd,
       lastTs: s.lastTs,
       byteOffset: 0,
+      parentSessionId: s.parentSessionId,
     };
   }
   const month = new Date(NOW_MS).toISOString().slice(0, 7);
@@ -314,6 +320,30 @@ test("month counts include only current-month sessions and exclude the prior mon
   );
   const total = counts.reduce((s, c) => s + c.count, 0);
   assert.strictEqual(total, 3, "month total counts only June's 3 sessions");
+});
+
+test("the fleet count and live tally exclude subagent records — a subagent is not a session", () => {
+  const month = new Date(NOW_MS).toISOString().slice(0, 7);
+  const idx = makeIndex(
+    [
+      { modelClass: "opus", lastTs: NOW_MS, costUsd: 1 },
+      // A live haiku subagent under the opus parent: real spend, not a session.
+      {
+        modelClass: "haiku",
+        lastTs: NOW_MS,
+        costUsd: 1,
+        parentSessionId: "session-0",
+      },
+    ],
+    0,
+  );
+
+  assert.deepStrictEqual(monthClassCounts(idx.sessions, month), [
+    { cls: "opus", count: 1 },
+  ]);
+  assert.deepStrictEqual(liveClassCounts(idx.sessions, NOW_MS), [
+    { cls: "opus", count: 1 },
+  ]);
 });
 
 test("the count cell is the active-class month count Σ month total, plus an active cell per live class", () => {

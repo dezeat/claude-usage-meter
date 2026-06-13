@@ -27,6 +27,9 @@ export function monthClassCounts(
 ): ClassCount[] {
   const counts = new Map<string, number>();
   for (const rec of Object.values(sessions)) {
+    // A subagent transcript is not a session — its spend is credited to the parent
+    // (ADR-0001), so it never adds to the per-class session count.
+    if (rec.parentSessionId !== undefined) continue;
     if (monthOf(rec.lastTs) !== month) continue;
     counts.set(rec.modelClass, (counts.get(rec.modelClass) ?? 0) + 1);
   }
@@ -45,6 +48,8 @@ export function liveClassCounts(
 ): ClassCount[] {
   const counts = new Map<string, number>();
   for (const rec of Object.values(sessions)) {
+    // Subagents aren't live sessions of their own (ADR-0001) — skip child records.
+    if (rec.parentSessionId !== undefined) continue;
     if (nowMs - rec.lastTs >= LIVENESS_WINDOW_MS) continue;
     if (excludeSessionId !== undefined && rec.sessionId === excludeSessionId)
       continue;

@@ -7,6 +7,7 @@ import { tmpdir } from "node:os";
 import {
   foldLines,
   discoverTranscriptPaths,
+  parentSessionIdOf,
   updateIndex,
   updateSession,
   readIndex,
@@ -903,4 +904,116 @@ test("discovery spans every project, not a single hardcoded project name", () =>
   ]);
 
   assert.deepEqual(new Set(discoverTranscriptPaths(projects)), new Set([a, b]));
+});
+
+test("parentSessionIdOf reads the parent id from a subagent path, undefined for a top-level transcript", () => {
+  assert.strictEqual(
+    parentSessionIdOf("/c/projects/-proj/PARENT/subagents/agent-x.jsonl"),
+    "PARENT",
+  );
+  assert.strictEqual(
+    parentSessionIdOf("/c/projects/-proj/SESSION.jsonl"),
+    undefined,
+  );
+});
+
+test("discovery descends into <session>/subagents/ and finds subagent transcripts", () => {
+  const tmp = makeTmpDir();
+  const projects = join(tmp, "projects");
+  const proj = join(projects, "-proj");
+  mkdirSync(join(proj, "S", "subagents"), { recursive: true });
+  const main = writeJsonl(proj, "S.jsonl", [
+    userLine("2026-06-13T10:00:00.000Z", "main"),
+  ]);
+  const sub = join(proj, "S", "subagents", "agent-1.jsonl");
+  writeFileSync(
+    sub,
+    userLine("2026-06-13T10:01:00.000Z", "main") + "\n",
+    "utf8",
+  );
+
+  assert.deepEqual(
+    new Set(discoverTranscriptPaths(projects)),
+    new Set([main, sub]),
+  );
+});
+
+test("subagent tokens are credited to the parent session, counted under their own class, never a session", async () => {
+  const tmp = makeTmpDir();
+  const projects = join(tmp, "projects");
+  const proj = join(projects, "-home-u-proj");
+  const PARENT = "11111111-1111-1111-1111-111111111111";
+  mkdirSync(join(proj, PARENT, "subagents"), { recursive: true });
+
+  // Parent: opus, 1M input → $5.00 (published Opus 4.8 pricing).
+  writeFileSync(
+    join(proj, `${PARENT}.jsonl`),
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "rp",
+      msgId: "mp",
+      model: "claude-opus-4-8",
+      input: 1_000_000,
+      output: 0,
+    }) + "\n",
+    "utf8",
+  );
+  // Subagent in the real sidechain shape: haiku, 2M input → $2.00 (Haiku 4.5 $1/Mtok).
+  writeFileSync(
+    join(proj, PARENT, "subagents", "agent-x.jsonl"),
+    JSON.stringify({
+      type: "assistant",
+      isSidechain: true,
+      sessionId: PARENT,
+      parentUuid: "u",
+      timestamp: "2026-06-13T10:01:00.000Z",
+      gitBranch: "main",
+      requestId: "rs",
+      message: {
+        id: "ms",
+        model: "claude-haiku-4-5",
+        usage: { input_tokens: 2_000_000, output_tokens: 0 },
+      },
+    }) + "\n",
+    "utf8",
+  );
+
+  const dbPath = join(tmp, "index.db");
+  const index = await updateIndex(dbPath, projects, DEFAULT_PRICING);
+
+  // Credited to the parent session: $5 opus + $2 haiku.
+  const totals = sessionTotals(index, PARENT, undefined);
+  assert.ok(totals);
+  assert.strictEqual(
+    totals.costUsd,
+    7,
+    "parent total includes the subagent's $2",
+  );
+
+  // Per-class spend keeps the subagent under its real class (haiku), not the parent's.
+  const spend = monthClassSpend(dbPath, "2026-06");
+  assert.strictEqual(spend.byClass["opus"]?.costUsd, 5);
+  assert.strictEqual(spend.byClass["haiku"]?.costUsd, 2);
+
+  // Session count: one opus session; the subagent is not counted as a session.
+  const counts = monthSessionCounts(dbPath, "2026-06");
+  assert.strictEqual(
+    counts.byClass.find((c) => c.cls === "opus")?.count,
+    1,
+    "the parent is the one session",
+  );
+  assert.strictEqual(
+    counts.byClass.find((c) => c.cls === "haiku"),
+    undefined,
+    "the subagent is not a haiku session",
+  );
+  assert.strictEqual(
+    counts.total,
+    1,
+    "one session total — the subagent excluded",
+  );
+
+  // The child row exists, tagged with its parent.
+  assert.strictEqual(index.sessions["agent-x"]?.parentSessionId, PARENT);
 });

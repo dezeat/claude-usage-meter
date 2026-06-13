@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {} from "./aggregate.js";
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 function isLockedError(err) {
     return err instanceof Error && err.message.toLowerCase().includes("locked");
 }
@@ -32,6 +32,28 @@ function enableWal(db) {
         }
     }
 }
+function isDuplicateColumnError(err) {
+    return (err instanceof Error &&
+        err.message.toLowerCase().includes("duplicate column"));
+}
+// Upgrade an older on-disk DB in place. A fresh DB is already current from openDb's
+// CREATE TABLE, so this only matters for a pre-existing one. v1 -> v2 adds the
+// parent_session_id column for subagent attribution (ADR-0001). The ALTER is
+// idempotent: a freshly created table already has the column, and two worktrees can
+// race to migrate the same old DB — both surface as "duplicate column", which we
+// tolerate. busy_timeout covers the schema-lock contention, like the WAL switch.
+function migrateSchema(db) {
+    if (schemaVersion(db) >= 2)
+        return;
+    try {
+        db.exec("ALTER TABLE sessions ADD COLUMN parent_session_id TEXT");
+    }
+    catch (err) {
+        if (!isDuplicateColumnError(err))
+            throw err;
+    }
+    db.exec("PRAGMA user_version = 2");
+}
 // The DB is the cross-session store, one row per Claude Code session keyed by
 // session_id (the transcript UUID). It replaces the rewritten index.json: a
 // whole-file writeFileSync raced across parallel worktree renders and dropped
@@ -52,19 +74,20 @@ export function openDb(dbPath) {
     // dropping it would require a schema migration.
     db.exec(`
     CREATE TABLE IF NOT EXISTS sessions (
-      session_id  TEXT PRIMARY KEY,
-      path        TEXT NOT NULL,
-      branch      TEXT,
-      model_class TEXT,
-      cost_usd    REAL,
-      last_ts     INTEGER,
-      byte_offset INTEGER NOT NULL,
-      month       TEXT,
-      tokens_json TEXT,
-      machine_id  TEXT
+      session_id        TEXT PRIMARY KEY,
+      path              TEXT NOT NULL,
+      branch            TEXT,
+      model_class       TEXT,
+      cost_usd          REAL,
+      last_ts           INTEGER,
+      byte_offset       INTEGER NOT NULL,
+      month             TEXT,
+      tokens_json       TEXT,
+      parent_session_id TEXT,
+      machine_id        TEXT
     )
   `);
-    db.exec(`PRAGMA user_version = ${SCHEMA_VERSION}`);
+    migrateSchema(db);
     return db;
 }
 export function schemaVersion(db) {
@@ -112,6 +135,7 @@ function toSessionRow(raw) {
         byteOffset: raw.byte_offset,
         month: raw.month ?? "unknown",
         tokens: parseTokens(raw.tokens_json),
+        parentSessionId: raw.parent_session_id,
     };
 }
 export function getSession(db, sessionId) {
@@ -133,7 +157,7 @@ export function countSessionsByClassForMonth(db, month) {
     const rows = db
         .prepare(`SELECT model_class, COUNT(*) AS n
          FROM sessions
-        WHERE month = ?
+        WHERE month = ? AND parent_session_id IS NULL
         GROUP BY model_class`)
         .all(month);
     const out = new Map();
@@ -149,7 +173,7 @@ export function countLiveSessionsByClass(db, nowMs, windowMs) {
     const rows = db
         .prepare(`SELECT model_class, COUNT(*) AS n
          FROM sessions
-        WHERE ? - last_ts < ?
+        WHERE ? - last_ts < ? AND parent_session_id IS NULL
         GROUP BY model_class`)
         .all(nowMs, windowMs);
     const out = new Map();
@@ -161,7 +185,9 @@ export function countLiveSessionsByClass(db, nowMs, windowMs) {
 // rollup needs. The cost lives in a SQL column and could be SUMmed in the
 // query, but the per-model token totals are opaque JSON the store must fold in
 // JS — so a single month-scoped query returns the rows and the caller groups by
-// model_class. Ordering is by class to keep the fold deterministic.
+// model_class. Ordering is by class to keep the fold deterministic. Subagent
+// rows are intentionally NOT filtered: their spend counts under their own
+// model_class (ADR-0002), even though they are not counted as sessions.
 export function monthClassSpendRows(db, month) {
     const rows = db
         .prepare(`SELECT model_class, cost_usd, tokens_json
@@ -181,15 +207,16 @@ export function monthClassSpendRows(db, month) {
 export function upsertSession(db, row) {
     db.prepare(`INSERT INTO sessions
        (session_id, path, branch, model_class, cost_usd, last_ts,
-        byte_offset, month, tokens_json, machine_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        byte_offset, month, tokens_json, parent_session_id, machine_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
      ON CONFLICT(session_id) DO UPDATE SET
-       path        = excluded.path,
-       branch      = excluded.branch,
-       model_class = excluded.model_class,
-       cost_usd    = excluded.cost_usd,
-       last_ts     = excluded.last_ts,
-       byte_offset = excluded.byte_offset,
-       month       = excluded.month,
-       tokens_json = excluded.tokens_json`).run(row.sessionId, row.path, row.branch, row.modelClass, row.costUsd, row.lastTs, row.byteOffset, row.month, JSON.stringify(row.tokens));
+       path              = excluded.path,
+       branch            = excluded.branch,
+       model_class       = excluded.model_class,
+       cost_usd          = excluded.cost_usd,
+       last_ts           = excluded.last_ts,
+       byte_offset       = excluded.byte_offset,
+       month             = excluded.month,
+       tokens_json       = excluded.tokens_json,
+       parent_session_id = excluded.parent_session_id`).run(row.sessionId, row.path, row.branch, row.modelClass, row.costUsd, row.lastTs, row.byteOffset, row.month, JSON.stringify(row.tokens), row.parentSessionId);
 }
