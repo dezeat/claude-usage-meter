@@ -1,0 +1,14 @@
+# gitleaks config — extends the bundled default ruleset and adds an allowlist for
+# this repo. The fixtures and test files carry synthetic Claude Code transcript
+# data (request ids, session UUIDs, fake usage payloads) that can trip the
+# generic high-entropy rule; they are test data by definition, never real
+# secrets, so they are scoped out to keep the scan signal honest.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Synthetic test data — not real secrets"
+paths = [
+  '''fixtures/''',
+  '''.*\.test\.ts$''',
+]

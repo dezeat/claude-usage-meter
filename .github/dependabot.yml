@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # Dev dependencies only (the plugin ships zero runtime deps — D-012). Minor and
+  # patch bumps are grouped into one weekly PR to keep the noise down; majors
+  # still arrive as individual PRs so they get a deliberate review.
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    groups:
+      dev-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: chore
