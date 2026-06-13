@@ -104,6 +104,32 @@ whenever `src/` changes — the PR checklist enforces it.
 keys, or personal data; fixtures are synthetic. A gitleaks secret-scan runs in
 CI and a large-file guard runs pre-commit.
 
+## Project management & docs live in GitHub
+
+Coordination state and most documentation live in **GitHub**, not the repo — so
+work is visible and continuable across sessions, users, and machines (context lost
+between agents is the dominant multi-agent failure mode):
+
+- **PM hierarchy** — epics / stories / tickets are **GitHub Issues** on a
+  **Project** board. The board is the single source of status.
+- **Design, knowledge, open questions, decision rationale** — **GitHub
+  Discussions** (`Design` / `Decisions` / `Handovers` categories).
+- **Handovers** — an **issue comment** (or a Discussion), never a local file; use
+  the `handover` skill.
+
+A few **binding agentic docs stay in the repo** — and only these — because an
+agent needs them in its context window while coding:
+
+- `CLAUDE.md` — operating rules and architecture invariants (this file).
+- `.claude/skills/` — workflow skills (`pr`, `parallel`, `grill-me-with-docs`,
+  `handover`).
+- `docs/decisions/ADR-NNNN-*.md` — short, binding decision records (`docs/decisions/README.md`
+  carries the format). The long-form _why_ and debate live in a `Decisions`
+  Discussion; the ADR is the in-context constraint.
+
+Default to GitHub. Put a doc in the repo only with a specific, argued reason that
+an implementing agent must read it in-context.
+
 ## Commits & PRs
 
 - **Conventional Commits**: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`,
@@ -119,4 +145,8 @@ CI and a large-file guard runs pre-commit.
 ## Reference
 
 - **README.md** — what each row shows, install, requirements.
-- **.claude/skills/** — repo workflow skills (`pr`).
+- **GitHub** — Issues + Project (PM), Discussions (design / decisions / handovers).
+  See "Project management & docs live in GitHub" above.
+- **`docs/decisions/`** — binding ADRs (`README.md` carries the format).
+- **`.claude/skills/`** — workflow skills: `pr`, `parallel`, `grill-me-with-docs`,
+  `handover`.
