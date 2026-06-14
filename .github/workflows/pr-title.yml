@@ -1,0 +1,33 @@
+name: PR Title
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+# Least privilege: read the PR to validate its title. No local devDependency is
+# used (a commitlint hook would break commits when node_modules is absent), so the
+# Conventional Commit gate lives here, on the PR title that becomes the squash
+# commit subject on merge.
+permissions:
+  pull-requests: read
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v6
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Mirror CLAUDE.md's allowed Conventional Commit types.
+          types: |
+            feat
+            fix
+            refactor
+            test
+            docs
+            chore
+            perf
+            build
+            ci
+          requireScope: false
