@@ -221,6 +221,40 @@ test("billing-period total equals the sum of the per-day rows in that period", (
   );
 });
 
+test("the billing breakdown surfaces the four token kinds and the cache-read share that explains the total", () => {
+  // Cache-read-dominated month, hand-computed (the oracle): one model with
+  //   input 12_000 + output 5_000 + cacheRead 960_000 + cacheCreate 23_000
+  //   = 1_000_000 total; cache reads are 960_000 / 1_000_000 = 96%.
+  const cacheHeavy: CrossSessionIndex = {
+    sessions: {},
+    byMonth: {
+      "2026-06": {
+        tokens: {
+          "claude-opus-4-8": {
+            inputTokens: 12_000,
+            outputTokens: 5_000,
+            cacheReadTokens: 960_000,
+            cacheCreationTokens: 23_000,
+          },
+        },
+        costUsd: 1.23,
+      },
+    },
+    byBranch: {},
+    updatedAt: 0,
+  };
+
+  const out = formatReport(cacheHeavy, NOW, false);
+  assert.ok(out.includes("in 12.0k"), "input slice missing from report");
+  assert.ok(out.includes("out 5.0k"), "output slice missing from report");
+  assert.ok(out.includes("960.0k r"), "cache-read slice missing from report");
+  assert.ok(out.includes("23.0k w"), "cache-create slice missing from report");
+  assert.ok(
+    out.includes("96% cache reads"),
+    "cache-read share cue missing from report",
+  );
+});
+
 test("empty index produces section headers with empty roll-up and does not throw", () => {
   const emptyIndex: CrossSessionIndex = {
     sessions: {},
