@@ -17,12 +17,7 @@ It reads only the statusline payload Claude Code pipes in on stdin and your
 local session transcripts under `~/.claude/projects`. **No network, no
 telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 
-```text
-now     opus 4.8 · claude-usage-meter ⎇ main
-limits  ctx ▓▓▓░░░░░ 40% · 5h ▓▓▓▓│▓░░░ 60% ⟳ 2h29m · 7d ▓▓▓│▓▓▓▓░ 85% ⟳ 4d15h
-spend   ses $3.45 1.2M · mdl $156.93 180M · Σ $235.92 227M
-fleet   mdl 9 Σ 23 · active ● opus 1
-```
+![claude-usage-meter statusline — the now, limits, spend and fleet rows](assets/statusline.svg)
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
 > idle / accumulated / chrome, the row label is accent-coloured, a green ● marks
