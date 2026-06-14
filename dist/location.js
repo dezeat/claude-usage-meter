@@ -13,7 +13,14 @@ export function resolveLocation(cwd) {
         const repo = findRepo(cwd);
         if (repo === undefined)
             return { name: basename(cwd) };
-        return { name: basename(repo.root), branch: readBranch(repo.gitDir) };
+        // In a linked worktree the *true* repo name comes from the gitdir path, not
+        // basename(root) (which is the worktree dir). The worktree cell is added
+        // only there; a normal checkout returns the same shape as before.
+        return {
+            name: repo.repoName ?? basename(repo.root),
+            branch: readBranch(repo.gitDir),
+            ...(repo.worktree !== undefined && { worktree: repo.worktree }),
+        };
     }
     catch {
         return { name: basename(cwd) };
@@ -32,8 +39,9 @@ function findRepo(start) {
             return { root: dir, gitDir: dotGit };
         if (stat?.isFile()) {
             const gitDir = resolveGitdirFile(dotGit);
-            if (gitDir !== undefined)
-                return { root: dir, gitDir };
+            if (gitDir !== undefined) {
+                return { root: dir, gitDir, ...parseWorktreeGitdir(gitDir) };
+            }
         }
         const parent = dirname(dir);
         if (parent === dir)
@@ -49,6 +57,20 @@ function resolveGitdirFile(file) {
     if (target === undefined || target === "")
         return undefined;
     return isAbsolute(target) ? target : join(dirname(file), target);
+}
+// A linked-worktree gitdir is `…/<repo>/.git/worktrees/<name>`. Walk it back:
+// `<name>` is the basename, and the true repo dir is two levels above
+// `worktrees/` (past `worktrees` and `.git`). A gitdir that doesn't match this
+// shape (a non-worktree `.git` file) yields nothing, so basename(root) stands.
+function parseWorktreeGitdir(gitDir) {
+    const worktree = basename(gitDir);
+    const worktreesDir = dirname(gitDir);
+    if (basename(worktreesDir) !== "worktrees")
+        return {};
+    const dotGitDir = dirname(worktreesDir);
+    if (basename(dotGitDir) !== ".git")
+        return {};
+    return { repoName: basename(dirname(dotGitDir)), worktree };
 }
 // HEAD is `ref: refs/heads/<branch>` on a branch, or a raw commit SHA when
 // detached — in which case there is no branch to show. Any read error is
