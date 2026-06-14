@@ -11,6 +11,12 @@ import {
 
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
 
+// The active model's own class is named on the `now` row ("opus 4.8"), so the
+// rows below it would only repeat that identity. They use this neutral self-tag
+// instead — "this model" — freeing the real class names for the live `active ●`
+// tally, where they distinguish *other* sessions' models.
+export const SELF_LABEL = "mdl";
+
 function sortClassCounts(counts: Map<string, number>): ClassCount[] {
   return Array.from(counts, ([cls, count]) => ({ cls, count })).sort((a, b) => {
     if (b.count !== a.count) return b.count - a.count;
@@ -58,12 +64,12 @@ export function liveClassCounts(
   return sortClassCounts(counts);
 }
 
-// The fleet row cells (board section 1): a count cell — the active model class
-// named (it is the row this model "owns", so the name lives here, not pinned on
-// the account-wide limits row), its month session count, a Σ connective, then
-// the month grand total across all classes: `<class> <current> Σ <total>`. The
-// class label and the Σ are dim (the Σ reads as a quiet connective, matching the
-// Σ on the spend row); the two counts are bright. Followed, only when another
+// The fleet row cells (board section 1): a count cell — the neutral self-tag
+// (`mdl`, since the now row already names the active model), the active class's
+// month session count, a Σ connective, then the month grand total across all
+// classes: `mdl <current> Σ <total>`. The self-tag and the Σ are dim (the Σ
+// reads as a quiet connective, matching the Σ on the spend row); the two counts
+// are bright. Followed, only when another
 // session is live, by an `active` cell tallying live sessions per class as
 // `active ● <class> <n> …`. The current session is excluded from the live tally
 // (it is "besides you"), so the active cell vanishes when nothing else is live.
@@ -81,7 +87,7 @@ export function renderRoster(
   const currentCount =
     monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
 
-  const countCell = `${paint(currentClass, "dim", color)} ${paint(
+  const countCell = `${paint(SELF_LABEL, "dim", color)} ${paint(
     `${currentCount}`,
     "brightWhite",
     color,
@@ -107,10 +113,10 @@ export interface MonthlySpend {
 
 // The active class's accumulated spend this month and the month Σ total, as two
 // cost-forward spend-row cells (`<label> $<cost> <tokens>`): the dim label, the
-// bright cost, the dim token count. The active cell is labelled with the model
-// class name; Σ counts every class including ones not shown individually. A zero
-// for the active class is meaningful (nothing spent on it yet this month), so it
-// renders `<class> $0.00 0` rather than being omitted.
+// bright cost, the dim token count. The active cell is labelled with the neutral
+// self-tag (`mdl`); Σ counts every class including ones not shown individually. A
+// zero for the active class is meaningful (nothing spent on it yet this month),
+// so it renders `mdl $0.00 0` rather than being omitted.
 export function renderMonthly(
   indexPath: string,
   activeClass: string,
@@ -118,11 +124,13 @@ export function renderMonthly(
   color: boolean,
 ): MonthlySpend {
   const spend = monthClassSpend(indexPath, month);
+  // Look up by the real class; render under the neutral self-tag (the now row
+  // already names the model). A Σ over every class follows.
   const active = spend.byClass[activeClass] ?? { tokens: 0, costUsd: 0 };
 
   return {
     active: costForward(
-      activeClass,
+      SELF_LABEL,
       active.costUsd,
       humanTokens(active.tokens),
       color,
