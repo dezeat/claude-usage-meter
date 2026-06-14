@@ -6,6 +6,7 @@
       "package-name": "claude-usage-meter",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
+      "release-as": "0.1.0",
       "extra-files": [
         {
           "type": "json",
