@@ -13,7 +13,7 @@ import { type ParsedPayload, type RateWindow } from "./payload.js";
 
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
 
-const ROW_LABELS = ["now", "limits", "spend", "fleet"] as const;
+const ROW_LABELS = ["current", "limits", "spend", "fleet"] as const;
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
 
 // Where the session is rooted: the repo (or plain dir) name, plus the git
@@ -97,7 +97,7 @@ function activeClass(payload: ParsedPayload): string {
 // not "Opus 4.8"); the location is a bright repo/dir name with the branch after
 // a dim ⎇ glyph (dropped outside a repo). Either cell may be absent — joinFields
 // drops the empty one, and an empty row is omitted by the caller.
-function nowCells(
+function currentCells(
   payload: ParsedPayload,
   location: Location | undefined,
   color: boolean,
@@ -135,8 +135,11 @@ export function renderLine(
 
   const rows: string[] = [];
 
-  const nowRow = joinFields(nowCells(payload, options.location, color), color);
-  if (nowRow !== "") rows.push(labelled("now", nowRow, color));
+  const currentRow = joinFields(
+    currentCells(payload, options.location, color),
+    color,
+  );
+  if (currentRow !== "") rows.push(labelled("current", currentRow, color));
 
   const limits = joinFields(limitsCells(payload, now, color), color);
   if (limits !== "") rows.push(labelled("limits", limits, color));
@@ -169,7 +172,7 @@ export function renderLine(
 
   if (rows.length === 0) {
     return labelled(
-      "now",
+      "current",
       paint(payload.modelName ?? "Claude", "dim", color),
       color,
     );

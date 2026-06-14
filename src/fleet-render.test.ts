@@ -187,7 +187,7 @@ test("the spend and fleet cells emit no green-on-bar, yellow, or red SGR codes",
   }
 });
 
-test("a null index omits the fleet row, rendering the now, limits and a cost spend row", () => {
+test("a null index omits the fleet row, rendering the current, limits and a cost spend row", () => {
   const payload = parsePayload({
     model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
     cost: { total_cost_usd: 3.45 },
@@ -196,8 +196,8 @@ test("a null index omits the fleet row, rendering the now, limits and a cost spe
   const now = new Date(NOW_MS);
   const withNullIndex = renderLine(payload, now, { color: false, index: null });
   const rows = withNullIndex.split("\n");
-  // The now row leads (model "opus 4.8"); limits follows it.
-  assert.match(rows[0] ?? "", /^now {5}opus 4\.8$/);
+  // The current row leads (model "opus 4.8"); limits follows it.
+  assert.match(rows[0] ?? "", /^current {2}opus 4\.8$/);
   assert.match(rows[1] ?? "", /^limits .*ctx .* 24%/);
   assert.ok(
     !withNullIndex.includes("\nfleet"),
