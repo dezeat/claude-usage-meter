@@ -1,6 +1,8 @@
 # claude-usage-meter
 
 [![CI](https://github.com/dezeat/claude-usage-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dezeat/claude-usage-meter/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=node.js&logoColor=white)](package.json)
 
 A [Claude Code](https://code.claude.com) plugin that surfaces your usage at a
 glance — without making a single network call.
