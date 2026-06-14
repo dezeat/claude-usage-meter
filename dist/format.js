@@ -1,7 +1,50 @@
+import {} from "./aggregate.js";
 export function humanTokens(count) {
     if (count >= 1_000_000)
         return `${(count / 1_000_000).toFixed(1)}M`;
     if (count >= 1_000)
         return `${(count / 1_000).toFixed(1)}k`;
     return `${count}`;
+}
+// Sum a per-model token map into one ModelUsage. Pure reducer shared by the
+// report and summary breakdowns so every breakdown sums the four token kinds
+// the same way — the same accounting ccusage reconciles against.
+export function sumUsage(tokens) {
+    const total = {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+    };
+    for (const usage of Object.values(tokens)) {
+        total.inputTokens += usage.inputTokens;
+        total.outputTokens += usage.outputTokens;
+        total.cacheReadTokens += usage.cacheReadTokens;
+        total.cacheCreationTokens += usage.cacheCreationTokens;
+    }
+    return total;
+}
+// The four-way input/output/cache-read/cache-create split on one line, the
+// breakdown that makes a low dollar figure legible: agentic usage is
+// cache-read-dominated, and a cache read is ~50× cheaper than output, so the
+// cost sits far below token-count × output-rate. `cache R r / C w` reads as R
+// read tokens and C written (created) tokens.
+export function tokenBreakdown(usage) {
+    return (`in ${humanTokens(usage.inputTokens)}` +
+        ` · out ${humanTokens(usage.outputTokens)}` +
+        ` · cache ${humanTokens(usage.cacheReadTokens)} r` +
+        ` / ${humanTokens(usage.cacheCreationTokens)} w`);
+}
+// The cache-read share of all tokens, rounded to a whole percent — the single
+// cue that explains a surprisingly-low cost ("96% cache reads"). Returns
+// undefined when there are no tokens, so callers omit the cue rather than
+// printing a meaningless 0%.
+export function cacheReadShare(usage) {
+    const total = usage.inputTokens +
+        usage.outputTokens +
+        usage.cacheReadTokens +
+        usage.cacheCreationTokens;
+    if (total === 0)
+        return undefined;
+    return Math.round((usage.cacheReadTokens / total) * 100);
 }
