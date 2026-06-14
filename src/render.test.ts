@@ -95,6 +95,34 @@ test("the now row drops the branch glyph outside a repo, showing the dir basenam
   assert.ok(!now.includes("⎇"), "no branch glyph without a branch");
 });
 
+test("the now row appends a worktree cue after repo ⎇ branch when inside a worktree", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    location: { name: "claude-usage-meter", branch: "side", worktree: "wt-1" },
+  });
+  const now = line.split("\n")[0] ?? "";
+  assert.match(now, /^now {5}opus 4\.8 · claude-usage-meter ⎇ side ⌂ wt-1$/);
+});
+
+test("the worktree cue is painted dim and distinct from the branch glyph", () => {
+  const now =
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: true,
+      location: { name: "repo", branch: "side", worktree: "wt-1" },
+    }).split("\n")[0] ?? "";
+  assert.ok(now.includes(`${ANSI.dim}⌂${ANSI.reset}`), "dim worktree glyph");
+});
+
+test("a location without a worktree renders the now row unchanged", () => {
+  const withWorktree = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    location: { name: "repo", branch: "main" },
+  });
+  const now = withWorktree.split("\n")[0] ?? "";
+  assert.match(now, /^now {5}opus 4\.8 · repo ⎇ main$/);
+  assert.ok(!now.includes("⌂"), "no worktree glyph without a worktree");
+});
+
 test("the now row carries the location alone when the model is unknown", () => {
   const line = renderLine(parsePayload({}), fixtureNow, {
     color: false,
