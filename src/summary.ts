@@ -1,6 +1,6 @@
 import { type CostByModel, type PricingTable } from "./pricing.js";
 import { type UsageByModel } from "./aggregate.js";
-import { humanTokens } from "./format.js";
+import { cacheReadShare, sumUsage, tokenBreakdown } from "./format.js";
 
 function box(lines: string[]): string {
   const width = Math.max(...lines.map((line) => line.length));
@@ -18,10 +18,7 @@ export function renderSummary(
 
   for (const entry of costs.perModel) {
     const modelUsage = usage.models[entry.model];
-    const tokens = modelUsage
-      ? `in ${humanTokens(modelUsage.inputTokens)}  out ${humanTokens(modelUsage.outputTokens)}  ` +
-        `cache ${humanTokens(modelUsage.cacheReadTokens)}r/${humanTokens(modelUsage.cacheCreationTokens)}w`
-      : "";
+    const tokens = modelUsage ? tokenBreakdown(modelUsage) : "";
     const amount = entry.known
       ? `$${entry.costUsd.toFixed(2)}`
       : "no pricing ⚠";
@@ -29,8 +26,17 @@ export function renderSummary(
     lines.push(`  ${tokens}`);
   }
 
+  // Session-total split under the total cost — the same four-way breakdown,
+  // summed across models, with the cache-read share that explains why the
+  // dollar figure is so far below token-count × output-rate.
+  const total = sumUsage(usage.models);
+  const share = cacheReadShare(total);
   lines.push("");
   lines.push(`total  $${costs.totalUsd.toFixed(2)}`);
+  lines.push(
+    `  ${tokenBreakdown(total)}` +
+      (share === undefined ? "" : `  (${share}% cache reads)`),
+  );
   if (costs.hasUnknownModels) {
     lines.push("(total excludes ⚠ unpriced models)");
   }
