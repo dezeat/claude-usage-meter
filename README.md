@@ -1,6 +1,8 @@
 # claude-usage-meter
 
 [![CI](https://github.com/dezeat/claude-usage-meter/actions/workflows/ci.yml/badge.svg)](https://github.com/dezeat/claude-usage-meter/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=node.js&logoColor=white)](package.json)
 
 A [Claude Code](https://code.claude.com) plugin that surfaces your usage at a
 glance — without making a single network call.
@@ -17,7 +19,7 @@ It reads only the statusline payload Claude Code pipes in on stdin and your
 local session transcripts under `~/.claude/projects`. **No network, no
 telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 
-![claude-usage-meter statusline — the now, limits, spend and fleet rows](assets/statusline.svg)
+![claude-usage-meter statusline — the current, limits, spend and fleet rows](assets/statusline.svg)
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
 > idle / accumulated / chrome, the row label is accent-coloured, a green ● marks
@@ -26,25 +28,26 @@ telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 
 ## What each row shows
 
-| Row        | Reading                                                                                                                                                                                                                                                                                                                                                                            |
-| :--------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **now**    | The active **model + version** (lowercased, `opus 4.8`) and **where the session is rooted** — the repo name and git **branch** after a `⎇`. Outside a git repo it shows the directory basename with no branch; resolved locally from `.git/HEAD`, never a subprocess. The model lives here, so the rows below it use a neutral `mdl` self-tag instead of repeating the class name. |
-| **limits** | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — it leads the `now` row above; limits are account-wide.                                                                          |
-| **spend**  | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), **this model** (`mdl`) this month, and **`Σ`**, the month total across every class.                                                                                                                                                                                                                        |
-| **fleet**  | **This model** (`mdl`), its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class (named by their real class, the row's one exception to `mdl`), **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live.              |
+| Row         | Reading                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| :---------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **current** | The active **model + version** (lowercased, `opus 4.8`) and **where the session is rooted** — the repo name and git **branch** after a `⎇`, then the **worktree** name after a `⌂` when the session sits in a linked git worktree (so two worktrees of one repo are distinguishable). Outside a git repo it shows the directory basename with no branch; resolved locally from `.git`, never a subprocess. The model lives here, so the rows below it use a neutral `mdl` self-tag instead of repeating the class name. |
+| **limits**  | Account-wide context + 5-hour + 7-day usage bars with reset countdowns; the **7-day** reset also spells out its absolute day (`⟳ 4d21h (Tue 16.06)`). Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — it leads the `current` row above; limits are account-wide.                                                                                                                             |
+| **spend**   | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), **this model** (`mdl`) this month, and **`Σ`**, the month total across every class.                                                                                                                                                                                                                                                                                                                                                             |
+| **fleet**   | **This model** (`mdl`), its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class (named by their real class, the row's one exception to `mdl`), **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live.                                                                                                                                                   |
 
 ### Glyphs
 
-| Glyph | Meaning                                                                   |
-| :---- | :------------------------------------------------------------------------ |
-| `▓ ░` | bar fill / empty                                                          |
-| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour       |
-| `·`   | faint field separator                                                     |
-| `●`   | green live-now marker, leads each live class in `active`                  |
-| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`)  |
-| `⟳`   | resets in…                                                                |
-| `⎇`   | git branch, on the `now` row (dropped outside a repo)                     |
-| `mdl` | self-tag for the active model on the rows below `now` (it is named there) |
+| Glyph | Meaning                                                                       |
+| :---- | :---------------------------------------------------------------------------- |
+| `▓ ░` | bar fill / empty                                                              |
+| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour           |
+| `·`   | faint field separator                                                         |
+| `●`   | green live-now marker, leads each live class in `active`                      |
+| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`)      |
+| `⟳`   | resets in… (the 7d reset also spells out its absolute day, `Tue 16.06`)       |
+| `⎇`   | git branch, on the `current` row (dropped outside a repo)                     |
+| `⌂`   | linked git worktree name, on the `current` row (dropped in a normal checkout) |
+| `mdl` | self-tag for the active model on the rows below `current` (it is named there) |
 
 ### Subagents
 
@@ -64,12 +67,65 @@ A consequence worth expecting: the fleet count can show `0` haiku _sessions_ whi
 the spend row shows nonzero haiku _spend_ — a subagent produced Haiku cost without
 being a session. That is correct, not a bug.
 
-It **degrades cleanly**: the `now` row shows the model alone when the working
+It **degrades cleanly**: the `current` row shows the model alone when the working
 dir is unknown, the directory basename when outside a git repo, and is dropped
 when neither model nor location is known; with no `rate_limits` in the payload
 (for example on an API-billing account) the `limits` row is just `ctx`; with no
 index yet the `spend` row is cost-only and `fleet` is dropped. A field never
 renders half-empty, and the line never errors.
+
+## How spend & fleet are computed
+
+The numbers are auditable — every figure comes from your own transcripts and a
+hand-maintained price table, with **no network call**. For the moving parts at a
+glance, see the [architecture map](https://github.com/dezeat/claude-usage-meter/discussions/46)
+(the pure-core / I-O-edge split and the three data flows).
+
+### Spend
+
+- **`ses` (this session)** is the session transcript aggregated by `aggregate.ts`
+  into per-model token counts — input, output, cache-read, cache-create — deduped
+  by `message.id + requestId` exactly as [ccusage](https://github.com/ryoppippi/ccusage)
+  does, so a resumed or retried turn is never double-counted. Those tokens are
+  priced by the hand-maintained `pricing.ts` table (dateless aliases; a
+  `-YYYYMMDD` snapshot prices the same as its alias).
+- **`mdl` this month** and the **`Σ` total** come from the cross-session
+  `node:sqlite` index: one row per session carrying its priced cost and model
+  class, rolled up per class for the active model and summed across **every**
+  class for `Σ`.
+- **Two cost sources, one rule.** Claude Code's payload carries its own running
+  `cost.total_cost_usd`; the index carries the **price-table calc** over the
+  aggregated tokens. The payload figure is authoritative for the **live,
+  not-yet-indexed** session (the `ses` cell falls back to it before the store
+  catches up); the price-table calc is authoritative for everything **persisted**
+  — cross-session, month, `Σ`, and the report. A model the table doesn't know
+  costs `$0`, is flagged `⚠`, and is **excluded** from the total — a price is
+  never guessed.
+- **Why the dollar figure looks low for the token count:** agentic usage is
+  dominated by **cache reads**, billed ~50× cheaper than output, so total cost
+  sits far below `tokens × output-rate`. The **report CLI** and the **`Stop`
+  summary** print the four-way input / output / cache-read / cache-create split
+  with a cache-read share (e.g. `96% cache reads`) so the number is legible, not
+  surprising.
+
+### Fleet
+
+- **`mdl <count> Σ <total>`** counts **sessions this month** per model class from
+  the index, plus the grand total across classes. Only **top-level** sessions are
+  counted.
+- **`active ●`** tallies sessions live **right now** — `lastTs` within the
+  liveness window (`LIVENESS_WINDOW_MS`, 5 minutes) — per class, **excluding the
+  session you're in**, so it reads as "besides you." The cell vanishes when
+  nothing else is live.
+- **Subagents are attributed, not counted.** A subagent runs in its own
+  transcript (`isSidechain`) and gets its own index row, but its spend **rolls
+  into the parent session's `ses`** and is priced under the **subagent's own**
+  model class — never relabelled to the parent's
+  ([ADR-0001](docs/decisions/ADR-0001-subagent-row-per-file.md),
+  [ADR-0002](docs/decisions/ADR-0002-subagent-spend-follows-real-model.md)). It is
+  **never tallied as a session**. This is why the counts and the spend can
+  legitimately diverge — `0` haiku _sessions_ alongside nonzero haiku _spend_ is
+  correct, not a bug.
 
 ## Requirements
 

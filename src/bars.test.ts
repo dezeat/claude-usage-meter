@@ -8,8 +8,15 @@ import {
   elapsedFraction,
   fillColor,
   formatCountdown,
+  formatResetDate,
   paceBar,
 } from "./bars.js";
+
+// formatResetDate reads the reset timestamp in the host's local timezone; pin it
+// to UTC so the weekday/date assertion below is deterministic everywhere (CI
+// already runs UTC, this covers dev machines too). The other bars tests use only
+// relative-second math and are timezone-independent.
+process.env.TZ = "UTC";
 
 test("elapsed fraction is the share of the window already gone", () => {
   const resetsAt = 1900000000;
@@ -83,4 +90,11 @@ test("countdown formats minutes, hours and days distinctly", () => {
   assert.equal(formatCountdown(47 * 60), "47m");
   assert.equal(formatCountdown(2 * 3600), "2h00m");
   assert.equal(formatCountdown(2 * 86400 + 3 * 3600), "2d3h");
+});
+
+test("the reset date is the weekday and zero-padded DD.MM of the reset day", () => {
+  // 2026-06-16 is a Tuesday (calendar oracle); with TZ pinned to UTC the local
+  // components equal the UTC ones, so the formatted day is deterministic.
+  const resetsAt = Date.UTC(2026, 5, 16) / 1000; // month index 5 = June
+  assert.equal(formatResetDate(resetsAt), "Tue 16.06");
 });
