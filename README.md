@@ -74,6 +74,59 @@ when neither model nor location is known; with no `rate_limits` in the payload
 index yet the `spend` row is cost-only and `fleet` is dropped. A field never
 renders half-empty, and the line never errors.
 
+## How spend & fleet are computed
+
+The numbers are auditable — every figure comes from your own transcripts and a
+hand-maintained price table, with **no network call**. For the moving parts at a
+glance, see the [architecture map](https://github.com/dezeat/claude-usage-meter/discussions/46)
+(the pure-core / I-O-edge split and the three data flows).
+
+### Spend
+
+- **`ses` (this session)** is the session transcript aggregated by `aggregate.ts`
+  into per-model token counts — input, output, cache-read, cache-create — deduped
+  by `message.id + requestId` exactly as [ccusage](https://github.com/ryoppippi/ccusage)
+  does, so a resumed or retried turn is never double-counted. Those tokens are
+  priced by the hand-maintained `pricing.ts` table (dateless aliases; a
+  `-YYYYMMDD` snapshot prices the same as its alias).
+- **`mdl` this month** and the **`Σ` total** come from the cross-session
+  `node:sqlite` index: one row per session carrying its priced cost and model
+  class, rolled up per class for the active model and summed across **every**
+  class for `Σ`.
+- **Two cost sources, one rule.** Claude Code's payload carries its own running
+  `cost.total_cost_usd`; the index carries the **price-table calc** over the
+  aggregated tokens. The payload figure is authoritative for the **live,
+  not-yet-indexed** session (the `ses` cell falls back to it before the store
+  catches up); the price-table calc is authoritative for everything **persisted**
+  — cross-session, month, `Σ`, and the report. A model the table doesn't know
+  costs `$0`, is flagged `⚠`, and is **excluded** from the total — a price is
+  never guessed.
+- **Why the dollar figure looks low for the token count:** agentic usage is
+  dominated by **cache reads**, billed ~50× cheaper than output, so total cost
+  sits far below `tokens × output-rate`. The **report CLI** and the **`Stop`
+  summary** print the four-way input / output / cache-read / cache-create split
+  with a cache-read share (e.g. `96% cache reads`) so the number is legible, not
+  surprising.
+
+### Fleet
+
+- **`mdl <count> Σ <total>`** counts **sessions this month** per model class from
+  the index, plus the grand total across classes. Only **top-level** sessions are
+  counted.
+- **`active ●`** tallies sessions live **right now** — `lastTs` within the
+  liveness window (`LIVENESS_WINDOW_MS`, 5 minutes) — per class, **excluding the
+  session you're in**, so it reads as "besides you." The cell vanishes when
+  nothing else is live.
+- **Subagents are attributed, not counted.** A subagent runs in its own
+  transcript (`isSidechain`) and gets its own index row, but its spend **rolls
+  into the parent session's `ses`** and is priced under the **subagent's own**
+  model class — never relabelled to the parent's
+  ([ADR-0001](docs/decisions/ADR-0001-subagent-row-per-file.md),
+  [ADR-0002](docs/decisions/ADR-0002-subagent-spend-follows-real-model.md)). It is
+  **never tallied as a session**. This is why the counts and the spend can
+  legitimately diverge — `0` haiku _sessions_ alongside nonzero haiku _spend_ is
+  correct, not a bug.
+
 ## Requirements
 
 - **Node.js ≥ 22.13** — the only hard floor. The cross-session store uses the
