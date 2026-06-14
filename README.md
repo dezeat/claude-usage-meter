@@ -5,8 +5,9 @@
 A [Claude Code](https://code.claude.com) plugin that surfaces your usage at a
 glance — without making a single network call.
 
-- **Live three-row statusline** — account limits with pace bars, cost-forward
-  spend, and a cross-session fleet view.
+- **Live four-row statusline** — the active model + where you're rooted
+  (repo ⎇ branch), account limits with pace bars, cost-forward spend, and a
+  cross-session fleet view.
 - **After-task cost summary** — a per-model token and dollar breakdown printed
   when a task finishes (a `Stop` hook).
 - **Off-session report** — a retrospective CLI dashboard across every project
@@ -17,9 +18,10 @@ local session transcripts under `~/.claude/projects`. **No network, no
 telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 
 ```text
+now     opus 4.8 · claude-usage-meter ⎇ main
 limits  ctx ▓▓▓░░░░░ 40% · 5h ▓▓▓▓│▓░░░ 60% ⟳ 2h29m · 7d ▓▓▓│▓▓▓▓░ 85% ⟳ 4d15h
-spend   ses $3.45 1.2M · opus $156.93 180M · Σ $235.92 227M
-fleet   opus 9 Σ 23 · active ● opus 1
+spend   ses $3.45 1.2M · mdl $156.93 180M · Σ $235.92 227M
+fleet   mdl 9 Σ 23 · active ● opus 1
 ```
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
@@ -29,22 +31,25 @@ fleet   opus 9 Σ 23 · active ● opus 1
 
 ## What each row shows
 
-| Row        | Reading                                                                                                                                                                                                                                                                                                     |
-| :--------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **limits** | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — limits are account-wide.                                 |
-| **spend**  | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), the active **model class** this month, and **`Σ`**, the month total across every class.                                                                                                                                             |
-| **fleet**  | The active **model class**, its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class, **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live. |
+| Row        | Reading                                                                                                                                                                                                                                                                                                                                                                            |
+| :--------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **now**    | The active **model + version** (lowercased, `opus 4.8`) and **where the session is rooted** — the repo name and git **branch** after a `⎇`. Outside a git repo it shows the directory basename with no branch; resolved locally from `.git/HEAD`, never a subprocess. The model lives here, so the rows below it use a neutral `mdl` self-tag instead of repeating the class name. |
+| **limits** | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — it leads the `now` row above; limits are account-wide.                                                                          |
+| **spend**  | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), **this model** (`mdl`) this month, and **`Σ`**, the month total across every class.                                                                                                                                                                                                                        |
+| **fleet**  | **This model** (`mdl`), its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class (named by their real class, the row's one exception to `mdl`), **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live.              |
 
 ### Glyphs
 
-| Glyph | Meaning                                                                  |
-| :---- | :----------------------------------------------------------------------- |
-| `▓ ░` | bar fill / empty                                                         |
-| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour      |
-| `·`   | faint field separator                                                    |
-| `●`   | green live-now marker, leads each live class in `active`                 |
-| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`) |
-| `⟳`   | resets in…                                                               |
+| Glyph | Meaning                                                                   |
+| :---- | :------------------------------------------------------------------------ |
+| `▓ ░` | bar fill / empty                                                          |
+| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour       |
+| `·`   | faint field separator                                                     |
+| `●`   | green live-now marker, leads each live class in `active`                  |
+| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`)  |
+| `⟳`   | resets in…                                                                |
+| `⎇`   | git branch, on the `now` row (dropped outside a repo)                     |
+| `mdl` | self-tag for the active model on the rows below `now` (it is named there) |
 
 ### Subagents
 
@@ -64,10 +69,12 @@ A consequence worth expecting: the fleet count can show `0` haiku _sessions_ whi
 the spend row shows nonzero haiku _spend_ — a subagent produced Haiku cost without
 being a session. That is correct, not a bug.
 
-It **degrades cleanly**: with no `rate_limits` in the payload (for example on an
-API-billing account) the `limits` row is just `ctx`; with no index yet the
-`spend` row is cost-only and `fleet` is dropped. A field never renders
-half-empty, and the line never errors.
+It **degrades cleanly**: the `now` row shows the model alone when the working
+dir is unknown, the directory basename when outside a git repo, and is dropped
+when neither model nor location is known; with no `rate_limits` in the payload
+(for example on an API-billing account) the `limits` row is just `ctx`; with no
+index yet the `spend` row is cost-only and `fleet` is dropped. A field never
+renders half-empty, and the line never errors.
 
 ## Requirements
 
