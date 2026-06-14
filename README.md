@@ -46,6 +46,24 @@ fleet   opus 9 Σ 23 · active ● opus 1
 | `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`) |
 | `⟳`   | resets in…                                                               |
 
+### Subagents
+
+A subagent runs in its own transcript file (`isSidechain`) but is not a separate
+user session, so it is accounted carefully:
+
+- Its cost **rolls into the parent session's `ses` total** — the work it did
+  counts toward the session that spawned it.
+- In the **per-class spend cells** it is priced under the **subagent's own model
+  class**, never relabelled to the parent's — a Haiku subagent under an Opus parent
+  shows as Haiku spend, because that is what was billed.
+- The **session counts** (`fleet`'s `N Σ total` and the live `active ●` tally)
+  count only top-level sessions, so a subagent is never tallied as one of your
+  sessions.
+
+A consequence worth expecting: the fleet count can show `0` haiku _sessions_ while
+the spend row shows nonzero haiku _spend_ — a subagent produced Haiku cost without
+being a session. That is correct, not a bug.
+
 It **degrades cleanly**: with no `rate_limits` in the payload (for example on an
 API-billing account) the `limits` row is just `ctx`; with no index yet the
 `spend` row is cost-only and `fleet` is dropped. A field never renders
@@ -98,16 +116,26 @@ the **absolute** path to your clone:
   locally over your own transcripts, so **refreshing costs no API tokens**, and
   an idle tick where no transcript has grown skips the index write entirely.
 
-### 3. (Optional) Enable the after-task summary
+### 3. (Optional) Enable the `Stop` hooks
 
-The per-task cost summary ships as a `Stop` hook. Either load the plugin for a
-session:
+Two hooks fire when a task finishes:
+
+- **`summary-hook.js`** prints the per-model cost summary for the task that just
+  ended.
+- **`index-hook.js`** writes _this_ session to the cross-session store on every
+  turn-end (a targeted, event-driven write — see
+  [ADR-0003](docs/decisions/ADR-0003-event-write-targeted-stop-hook.md)), so other
+  live sessions' `fleet` rows see it on their next refresh — even when this
+  session's statusline isn't ticking or isn't installed. Each hook is
+  failure-isolated and never blocks the turn.
+
+Either load the plugin for a session (registers both):
 
 ```bash
 claude --plugin-dir ~/.claude/tools/claude-usage-meter
 ```
 
-…or persist it in `~/.claude/settings.json`:
+…or persist them in `~/.claude/settings.json`:
 
 ```json
 {
@@ -120,6 +148,14 @@ claude --plugin-dir ~/.claude/tools/claude-usage-meter
             "command": "node /home/you/.claude/tools/claude-usage-meter/dist/summary-hook.js"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /home/you/.claude/tools/claude-usage-meter/dist/index-hook.js"
+          }
+        ]
       }
     ]
   }
@@ -128,8 +164,9 @@ claude --plugin-dir ~/.claude/tools/claude-usage-meter
 
 ### Install via the plugin marketplace
 
-This repo is also a single-plugin marketplace. Installing this way activates the
-**after-task summary hook** automatically:
+This repo is also a single-plugin marketplace. Installing this way activates both
+`Stop` hooks automatically — the **after-task summary** and the **per-session
+self-persist** that keeps other sessions' fleet views fresh:
 
 ```text
 /plugin marketplace add dezeat/claude-usage-meter
@@ -158,8 +195,12 @@ totals, and a billing-period total.
 
 The cross-session index is a single SQLite file at
 `~/.claude/usage-meter/index.db`, built incrementally from the transcripts under
-`~/.claude/projects`. Nothing leaves your machine. Delete the file to reset it;
-it is rebuilt on the next run.
+`~/.claude/projects`. It is written two ways, both local and both idempotent: the
+statusline sweeps every project on each refresh, and the `Stop` `index-hook`
+self-persists the current session (including its subagents) on every turn-end. Each
+transcript file is one row keyed by byte offset, so a line is counted exactly once
+no matter which path writes it. Nothing leaves your machine. Delete the file to
+reset it; it is rebuilt on the next run.
 
 ## Pricing
 
