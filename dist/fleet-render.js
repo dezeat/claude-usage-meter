@@ -50,7 +50,7 @@ export function liveClassCounts(sessions, nowMs, excludeSessionId) {
     return sortClassCounts(counts);
 }
 // The fleet row cells (board section 1): a count cell — the neutral self-tag
-// (`mdl`, since the now row already names the active model), the active class's
+// (`mdl`, since the current row already names the active model), the active class's
 // month session count, a Σ connective, then the month grand total across all
 // classes: `mdl <current> Σ <total>`. The self-tag and the Σ are dim (the Σ
 // reads as a quiet connective, matching the Σ on the spend row); the two counts
@@ -80,8 +80,8 @@ export function renderRoster(index, currentClass, month, nowMs, color, excludeSe
 // so it renders `mdl $0.00 0` rather than being omitted.
 export function renderMonthly(indexPath, activeClass, month, color) {
     const spend = monthClassSpend(indexPath, month);
-    // Look up by the real class; render under the neutral self-tag (the now row
-    // already names the model). A Σ over every class follows.
+    // Look up by the real class; render under the neutral self-tag (the current
+    // row already names the model). A Σ over every class follows.
     const active = spend.byClass[activeClass] ?? { tokens: 0, costUsd: 0 };
     return {
         active: costForward(SELF_LABEL, active.costUsd, humanTokens(active.tokens), color),
