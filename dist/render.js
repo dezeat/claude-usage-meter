@@ -4,7 +4,7 @@ import { renderFleet } from "./fleet-render.js";
 import { modelClass } from "./index-store.js";
 import {} from "./payload.js";
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
-const ROW_LABELS = ["now", "limits", "spend", "fleet"];
+const ROW_LABELS = ["current", "limits", "spend", "fleet"];
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
 // flanked by spaces. Empty cells are dropped so an absent field leaves no
@@ -51,7 +51,7 @@ function activeClass(payload) {
 // not "Opus 4.8"); the location is a bright repo/dir name with the branch after
 // a dim ⎇ glyph (dropped outside a repo). Either cell may be absent — joinFields
 // drops the empty one, and an empty row is omitted by the caller.
-function nowCells(payload, location, color) {
+function currentCells(payload, location, color) {
     const cells = [];
     if (payload.modelName !== undefined) {
         cells.push(paint(payload.modelName.toLowerCase(), "brightWhite", color));
@@ -77,9 +77,9 @@ function labelled(label, content, color) {
 export function renderLine(payload, now, options = {}) {
     const color = options.color ?? true;
     const rows = [];
-    const nowRow = joinFields(nowCells(payload, options.location, color), color);
-    if (nowRow !== "")
-        rows.push(labelled("now", nowRow, color));
+    const currentRow = joinFields(currentCells(payload, options.location, color), color);
+    if (currentRow !== "")
+        rows.push(labelled("current", currentRow, color));
     const limits = joinFields(limitsCells(payload, now, color), color);
     if (limits !== "")
         rows.push(labelled("limits", limits, color));
@@ -99,7 +99,7 @@ export function renderLine(payload, now, options = {}) {
         rows.push(labelled("spend", ses, color));
     }
     if (rows.length === 0) {
-        return labelled("now", paint(payload.modelName ?? "Claude", "dim", color), color);
+        return labelled("current", paint(payload.modelName ?? "Claude", "dim", color), color);
     }
     return rows.join("\n");
 }

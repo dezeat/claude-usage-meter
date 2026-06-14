@@ -19,7 +19,7 @@ It reads only the statusline payload Claude Code pipes in on stdin and your
 local session transcripts under `~/.claude/projects`. **No network, no
 telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 
-![claude-usage-meter statusline — the now, limits, spend and fleet rows](assets/statusline.svg)
+![claude-usage-meter statusline — the current, limits, spend and fleet rows](assets/statusline.svg)
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
 > idle / accumulated / chrome, the row label is accent-coloured, a green ● marks
@@ -28,26 +28,26 @@ telemetry, zero runtime dependencies** — just the Node built-in `node:sqlite`.
 
 ## What each row shows
 
-| Row        | Reading                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| :--------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **now**    | The active **model + version** (lowercased, `opus 4.8`) and **where the session is rooted** — the repo name and git **branch** after a `⎇`, then the **worktree** name after a `⌂` when the session sits in a linked git worktree (so two worktrees of one repo are distinguishable). Outside a git repo it shows the directory basename with no branch; resolved locally from `.git`, never a subprocess. The model lives here, so the rows below it use a neutral `mdl` self-tag instead of repeating the class name. |
-| **limits** | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — it leads the `now` row above; limits are account-wide.                                                                                                                                                                                                               |
-| **spend**  | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), **this model** (`mdl`) this month, and **`Σ`**, the month total across every class.                                                                                                                                                                                                                                                                                                                                                             |
-| **fleet**  | **This model** (`mdl`), its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class (named by their real class, the row's one exception to `mdl`), **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live.                                                                                                                                                   |
+| Row         | Reading                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| :---------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **current** | The active **model + version** (lowercased, `opus 4.8`) and **where the session is rooted** — the repo name and git **branch** after a `⎇`, then the **worktree** name after a `⌂` when the session sits in a linked git worktree (so two worktrees of one repo are distinguishable). Outside a git repo it shows the directory basename with no branch; resolved locally from `.git`, never a subprocess. The model lives here, so the rows below it use a neutral `mdl` self-tag instead of repeating the class name. |
+| **limits**  | Account-wide context + 5-hour + 7-day usage bars with reset countdowns. Bars colour by flat fill %; the bright `│` is the even-pace tick on the 5h/7d bars (where usage _should_ be for an even burn), and it never drives colour. No model here — it leads the `current` row above; limits are account-wide.                                                                                                                                                                                                           |
+| **spend**   | Cost-forward: **`$` leads, tokens trail dim**. This **session** (live), **this model** (`mdl`) this month, and **`Σ`**, the month total across every class.                                                                                                                                                                                                                                                                                                                                                             |
+| **fleet**   | **This model** (`mdl`), its sessions **this month**, a dim `Σ`, then the **month total** across every class (`9 Σ 23`), then **`active`** — other sessions live right now per class (named by their real class, the row's one exception to `mdl`), **excluding the one you're in**. A green `●` leads each live class; the cell is dropped when nothing else is live.                                                                                                                                                   |
 
 ### Glyphs
 
-| Glyph | Meaning                                                                   |
-| :---- | :------------------------------------------------------------------------ |
-| `▓ ░` | bar fill / empty                                                          |
-| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour       |
-| `·`   | faint field separator                                                     |
-| `●`   | green live-now marker, leads each live class in `active`                  |
-| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`)  |
-| `⟳`   | resets in…                                                                |
-| `⎇`   | git branch, on the `now` row (dropped outside a repo)                     |
-| `⌂`   | linked git worktree name, on the `now` row (dropped in a normal checkout) |
-| `mdl` | self-tag for the active model on the rows below `now` (it is named there) |
+| Glyph | Meaning                                                                       |
+| :---- | :---------------------------------------------------------------------------- |
+| `▓ ░` | bar fill / empty                                                              |
+| `│`   | bright even-pace tick; only inside a 5h/7d bar, never drives colour           |
+| `·`   | faint field separator                                                         |
+| `●`   | green live-now marker, leads each live class in `active`                      |
+| `Σ`   | month total across every model class (spend `Σ` cell; fleet `N Σ total`)      |
+| `⟳`   | resets in…                                                                    |
+| `⎇`   | git branch, on the `current` row (dropped outside a repo)                     |
+| `⌂`   | linked git worktree name, on the `current` row (dropped in a normal checkout) |
+| `mdl` | self-tag for the active model on the rows below `current` (it is named there) |
 
 ### Subagents
 
@@ -67,7 +67,7 @@ A consequence worth expecting: the fleet count can show `0` haiku _sessions_ whi
 the spend row shows nonzero haiku _spend_ — a subagent produced Haiku cost without
 being a session. That is correct, not a bug.
 
-It **degrades cleanly**: the `now` row shows the model alone when the working
+It **degrades cleanly**: the `current` row shows the model alone when the working
 dir is unknown, the directory basename when outside a git repo, and is dropped
 when neither model nor location is known; with no `rate_limits` in the payload
 (for example on an API-billing account) the `limits` row is just `ctx`; with no
