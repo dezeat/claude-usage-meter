@@ -18,6 +18,10 @@ jobs:
   analyze:
     name: analyze (javascript-typescript)
     runs-on: ubuntu-latest
+    # Code scanning needs GitHub Advanced Security on a private repo, so the
+    # upload 403s until the public flip (where CodeQL is free). Gate to public:
+    # the job skips cleanly now and auto-activates when the repo goes public.
+    if: ${{ github.event.repository.visibility == 'public' }}
     permissions:
       contents: read
       security-events: write # upload the SARIF results to code scanning
