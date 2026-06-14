@@ -1,0 +1,23 @@
+name: Release Please
+
+on:
+  push:
+    branches: [main]
+
+# Least privilege: release-please only writes the release PR/commit (contents)
+# and manages that PR (pull-requests). It needs nothing else.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    steps:
+      # Manifest mode: config + manifest are read from the repo root
+      # (release-please-config.json / .release-please-manifest.json), which keeps
+      # package.json and .claude-plugin/plugin.json bumped in lockstep.
+      - uses: googleapis/release-please-action@v4
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
