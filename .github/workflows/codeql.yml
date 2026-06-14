@@ -1,0 +1,40 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly off-hours scan catches advisories that land between pushes.
+    - cron: "27 4 * * 1"
+
+# Least privilege at the top level; the analyze job widens to exactly what CodeQL
+# needs (security-events:write to upload findings).
+permissions:
+  contents: read
+
+jobs:
+  analyze:
+    name: analyze (javascript-typescript)
+    runs-on: ubuntu-latest
+    # Code scanning needs GitHub Advanced Security on a private repo, so the
+    # upload 403s until the public flip (where CodeQL is free). Gate to public:
+    # the job skips cleanly now and auto-activates when the repo goes public.
+    if: ${{ github.event.repository.visibility == 'public' }}
+    permissions:
+      contents: read
+      security-events: write # upload the SARIF results to code scanning
+    steps:
+      # SHA-pinned for auditability; Dependabot bumps these. (Rationale spelled
+      # out once in ci.yml.)
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          # One language entry: TS compiles through the JS analyzer, no build step.
+          languages: javascript-typescript
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@dd903d2e4f5405488e5ef1422510ee31c8b32357 # v3.36.2
+        with:
+          category: "/language:javascript-typescript"
