@@ -1,5 +1,10 @@
 import { paint } from "./ansi.js";
-import { humanTokens } from "./format.js";
+import {
+  cacheReadShare,
+  humanTokens,
+  sumUsage,
+  tokenBreakdown,
+} from "./format.js";
 import {
   type CrossSessionIndex,
   type ModelUsage,
@@ -215,6 +220,15 @@ export function formatReport(
     `   ${humanTokens(sumTokens(billing.tokens))} tok` +
     `   $${billing.costUsd.toFixed(2)}`;
 
+  // The four-way split under the headline total: it makes a low dollar figure
+  // legible — agentic usage is cache-read-dominated, and cache reads are ~50×
+  // cheaper than output, so the cost sits far below token-count × output-rate.
+  const billingUsage = sumUsage(billing.tokens);
+  const share = cacheReadShare(billingUsage);
+  const breakdownLine =
+    `  ${tokenBreakdown(billingUsage)}` +
+    (share === undefined ? "" : `  (${share}% cache reads)`);
+
   const sections = [
     paint(header, "dim", color),
     paint(rule, "dim", color),
@@ -226,6 +240,7 @@ export function formatReport(
     formatBranchSection(index.byBranch, color),
     "",
     paint(billingLine, "brightWhite", color),
+    paint(breakdownLine, "dim", color),
   ];
 
   return sections.join("\n");
