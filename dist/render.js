@@ -1,5 +1,5 @@
 import { paint, padVisible } from "./ansi.js";
-import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, contextBar, elapsedFraction, formatCountdown, paceBar, } from "./bars.js";
+import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, contextBar, elapsedFraction, formatCountdown, formatResetDate, paceBar, } from "./bars.js";
 import { renderFleet } from "./fleet-render.js";
 import { modelClass } from "./index-store.js";
 import {} from "./payload.js";
@@ -13,12 +13,17 @@ function joinFields(cells, color) {
     const sep = ` ${paint("·", "dim", color)} `;
     return cells.filter((c) => c !== "").join(sep);
 }
-function renderLimit(label, window, windowSeconds, now, color) {
+function renderLimit(label, window, windowSeconds, now, color, showResetDate = false) {
     const fraction = elapsedFraction(window.resetsAt, windowSeconds, now);
     const bar = paceBar(window.usedPercentage, fraction, color);
     const percentage = `${Math.round(window.usedPercentage)}%`;
     const remainingSeconds = window.resetsAt - now.getTime() / 1000;
-    const reset = paint(`⟳ ${formatCountdown(remainingSeconds)}`, "dim", color);
+    // The 7d window resets days out, so its absolute day ("Tue 16.06") is the
+    // anchor the relative countdown lacks; the 5h window is same-day and omits it.
+    const absolute = showResetDate
+        ? ` (${formatResetDate(window.resetsAt)})`
+        : "";
+    const reset = paint(`⟳ ${formatCountdown(remainingSeconds)}${absolute}`, "dim", color);
     return `${label} ${bar} ${percentage} ${reset}`;
 }
 function limitsCells(payload, now, color) {
@@ -31,7 +36,7 @@ function limitsCells(payload, now, color) {
         cells.push(renderLimit("5h", payload.fiveHour, FIVE_HOUR_SECONDS, now, color));
     }
     if (payload.sevenDay) {
-        cells.push(renderLimit("7d", payload.sevenDay, SEVEN_DAY_SECONDS, now, color));
+        cells.push(renderLimit("7d", payload.sevenDay, SEVEN_DAY_SECONDS, now, color, true));
     }
     return cells;
 }

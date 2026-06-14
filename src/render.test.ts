@@ -153,7 +153,9 @@ test("the limits row starts with ctx — the model is no longer pinned here", ()
   assert.ok(!/^limits {3}opus/.test(limits), "no model pin on the limits row");
   assert.match(limits, /ctx .* 24%/);
   assert.match(limits, /5h .* 52% ⟳ 2h00m/);
-  assert.match(limits, /7d .* 68% ⟳ 2d3h/);
+  assert.match(limits, /7d .* 68% ⟳ 2d3h \(\w{3} \d\d\.\d\d\)$/);
+  // Only the 7d cell carries the absolute reset day — exactly one "(" in the row.
+  assert.equal((limits.match(/\(/g) ?? []).length, 1, "only 7d shows a date");
 });
 
 test("the spend row is cost-forward with the mdl self-label and Σ labels", () => {
