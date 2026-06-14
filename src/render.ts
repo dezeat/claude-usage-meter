@@ -17,11 +17,14 @@ const ROW_LABELS = ["now", "limits", "spend", "fleet"] as const;
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
 
 // Where the session is rooted: the repo (or plain dir) name, plus the git
-// branch when inside a repo. Resolved at the edge (location.ts) off the payload
-// cwd; the formatter here stays pure and never touches the filesystem.
+// branch when inside a repo, plus the linked-worktree name when the session
+// sits in one (so two worktrees of the same repo are distinguishable).
+// Resolved at the edge (location.ts) off the payload cwd; the formatter here
+// stays pure and never touches the filesystem.
 export interface Location {
   name: string;
   branch?: string;
+  worktree?: string;
 }
 
 interface RenderOptions {
@@ -104,12 +107,17 @@ function nowCells(
     cells.push(paint(payload.modelName.toLowerCase(), "brightWhite", color));
   }
   if (location !== undefined) {
-    const name = paint(location.name, "brightWhite", color);
-    cells.push(
-      location.branch !== undefined
-        ? `${name} ${paint("⎇", "dim", color)} ${location.branch}`
-        : name,
-    );
+    let cell = paint(location.name, "brightWhite", color);
+    if (location.branch !== undefined) {
+      cell += ` ${paint("⎇", "dim", color)} ${location.branch}`;
+    }
+    // A dim ⌂ + name trails the branch only inside a linked worktree, so two
+    // worktrees of one repo are distinguishable; a normal checkout leaves the
+    // cell byte-for-byte unchanged.
+    if (location.worktree !== undefined) {
+      cell += ` ${paint("⌂", "dim", color)} ${location.worktree}`;
+    }
+    cells.push(cell);
   }
   return cells;
 }

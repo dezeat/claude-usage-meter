@@ -9,6 +9,10 @@ interface GitRepo {
   // Where HEAD lives: `<root>/.git` for a normal checkout, but a *resolved*
   // gitdir for a linked worktree (whose `.git` is a file, not a directory).
   gitDir: string;
+  // The true repo name and the linked-worktree name, set only inside a linked
+  // worktree — derived from the gitdir path `…/<repo>/.git/worktrees/<name>`.
+  repoName?: string;
+  worktree?: string;
 }
 
 // Resolve the session's working location from the payload cwd — repo name and
@@ -21,7 +25,14 @@ export function resolveLocation(cwd: string | undefined): Location | undefined {
   try {
     const repo = findRepo(cwd);
     if (repo === undefined) return { name: basename(cwd) };
-    return { name: basename(repo.root), branch: readBranch(repo.gitDir) };
+    // In a linked worktree the *true* repo name comes from the gitdir path, not
+    // basename(root) (which is the worktree dir). The worktree cell is added
+    // only there; a normal checkout returns the same shape as before.
+    return {
+      name: repo.repoName ?? basename(repo.root),
+      branch: readBranch(repo.gitDir),
+      ...(repo.worktree !== undefined && { worktree: repo.worktree }),
+    };
   } catch {
     return { name: basename(cwd) };
   }
@@ -39,7 +50,9 @@ function findRepo(start: string): GitRepo | undefined {
     if (stat?.isDirectory()) return { root: dir, gitDir: dotGit };
     if (stat?.isFile()) {
       const gitDir = resolveGitdirFile(dotGit);
-      if (gitDir !== undefined) return { root: dir, gitDir };
+      if (gitDir !== undefined) {
+        return { root: dir, gitDir, ...parseWorktreeGitdir(gitDir) };
+      }
     }
     const parent = dirname(dir);
     if (parent === dir) return undefined;
@@ -54,6 +67,22 @@ function resolveGitdirFile(file: string): string | undefined {
   const target = match?.[1]?.trim();
   if (target === undefined || target === "") return undefined;
   return isAbsolute(target) ? target : join(dirname(file), target);
+}
+
+// A linked-worktree gitdir is `…/<repo>/.git/worktrees/<name>`. Walk it back:
+// `<name>` is the basename, and the true repo dir is two levels above
+// `worktrees/` (past `worktrees` and `.git`). A gitdir that doesn't match this
+// shape (a non-worktree `.git` file) yields nothing, so basename(root) stands.
+function parseWorktreeGitdir(gitDir: string): {
+  repoName?: string;
+  worktree?: string;
+} {
+  const worktree = basename(gitDir);
+  const worktreesDir = dirname(gitDir);
+  if (basename(worktreesDir) !== "worktrees") return {};
+  const dotGitDir = dirname(worktreesDir);
+  if (basename(dotGitDir) !== ".git") return {};
+  return { repoName: basename(dirname(dotGitDir)), worktree };
 }
 
 // HEAD is `ref: refs/heads/<branch>` on a branch, or a raw commit SHA when

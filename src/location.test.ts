@@ -42,11 +42,13 @@ test("a detached HEAD (raw SHA) yields the repo name with no branch", () => {
   assert.equal(loc?.branch, undefined);
 });
 
-test("a linked worktree (.git is a file) follows gitdir to read HEAD", () => {
+test("a linked worktree surfaces the true repo name, its branch and the worktree name", () => {
   // Lay out a main repo with a worktree git dir, and a separate worktree dir
   // whose `.git` is a file pointing at it — the shape `git worktree add` makes.
-  const main = tmp();
-  const wtGitDir = join(main, ".git", "worktrees", "wt");
+  // The gitdir path …/<repo>/.git/worktrees/<name> carries BOTH the true repo
+  // name (basename two levels above worktrees/) and the linked-worktree name.
+  const mainRoot = mkdtempSync(join(tmpdir(), "myrepo-"));
+  const wtGitDir = join(mainRoot, ".git", "worktrees", "wt-feature");
   mkdirSync(wtGitDir, { recursive: true });
   writeFileSync(join(wtGitDir, "HEAD"), "ref: refs/heads/side\n", "utf8");
 
@@ -54,8 +56,15 @@ test("a linked worktree (.git is a file) follows gitdir to read HEAD", () => {
   writeFileSync(join(worktree, ".git"), `gitdir: ${wtGitDir}\n`, "utf8");
 
   const loc = resolveLocation(worktree);
-  assert.equal(loc?.name, worktree.split("/").pop());
+  assert.equal(loc?.name, mainRoot.split("/").pop());
   assert.equal(loc?.branch, "side");
+  assert.equal(loc?.worktree, "wt-feature");
+});
+
+test("a normal checkout (.git is a directory) carries no worktree", () => {
+  const root = makeRepo("ref: refs/heads/main\n");
+  const loc = resolveLocation(root);
+  assert.equal(loc?.worktree, undefined);
 });
 
 test("outside any repo it falls back to the directory basename with no branch", () => {
