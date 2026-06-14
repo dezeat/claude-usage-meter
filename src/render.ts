@@ -5,6 +5,7 @@ import {
   contextBar,
   elapsedFraction,
   formatCountdown,
+  formatResetDate,
   paceBar,
 } from "./bars.js";
 import { renderFleet } from "./fleet-render.js";
@@ -48,12 +49,22 @@ function renderLimit(
   windowSeconds: number,
   now: Date,
   color: boolean,
+  showResetDate = false,
 ): string {
   const fraction = elapsedFraction(window.resetsAt, windowSeconds, now);
   const bar = paceBar(window.usedPercentage, fraction, color);
   const percentage = `${Math.round(window.usedPercentage)}%`;
   const remainingSeconds = window.resetsAt - now.getTime() / 1000;
-  const reset = paint(`⟳ ${formatCountdown(remainingSeconds)}`, "dim", color);
+  // The 7d window resets days out, so its absolute day ("Tue 16.06") is the
+  // anchor the relative countdown lacks; the 5h window is same-day and omits it.
+  const absolute = showResetDate
+    ? ` (${formatResetDate(window.resetsAt)})`
+    : "";
+  const reset = paint(
+    `⟳ ${formatCountdown(remainingSeconds)}${absolute}`,
+    "dim",
+    color,
+  );
   return `${label} ${bar} ${percentage} ${reset}`;
 }
 
@@ -75,7 +86,7 @@ function limitsCells(
   }
   if (payload.sevenDay) {
     cells.push(
-      renderLimit("7d", payload.sevenDay, SEVEN_DAY_SECONDS, now, color),
+      renderLimit("7d", payload.sevenDay, SEVEN_DAY_SECONDS, now, color, true),
     );
   }
 
