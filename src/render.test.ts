@@ -67,59 +67,95 @@ test("placeholder is a non-empty single line", () => {
   assert.ok(!PLACEHOLDER_LINE.includes("\n"));
 });
 
-test("a full payload + index renders four rows labelled now, limits, spend, fleet in order", () => {
+test("a full payload + index renders four rows labelled current, limits, spend, fleet in order", () => {
   const rows = fullRender(false).split("\n");
   assert.equal(rows.length, 4);
-  assert.match(rows[0] ?? "", /^now /);
+  assert.match(rows[0] ?? "", /^current /);
   assert.match(rows[1] ?? "", /^limits /);
   assert.match(rows[2] ?? "", /^spend /);
   assert.match(rows[3] ?? "", /^fleet /);
 });
 
-test("the now row shows the lowercased model and, given a location, repo ⎇ branch", () => {
+test("the current row shows the lowercased model and, given a location, repo ⎇ branch", () => {
   const line = renderLine(parsePayload(promax), fixtureNow, {
     color: false,
     location: { name: "claude-usage-meter", branch: "main" },
   });
   const now = line.split("\n")[0] ?? "";
-  assert.match(now, /^now {5}opus 4\.8 · claude-usage-meter ⎇ main$/);
+  assert.match(now, /^current {2}opus 4\.8 · claude-usage-meter ⎇ main$/);
 });
 
-test("the now row drops the branch glyph outside a repo, showing the dir basename", () => {
+test("the current row drops the branch glyph outside a repo, showing the dir basename", () => {
   const line = renderLine(parsePayload(promax), fixtureNow, {
     color: false,
     location: { name: "some-dir" },
   });
   const now = line.split("\n")[0] ?? "";
-  assert.match(now, /^now {5}opus 4\.8 · some-dir$/);
+  assert.match(now, /^current {2}opus 4\.8 · some-dir$/);
   assert.ok(!now.includes("⎇"), "no branch glyph without a branch");
 });
 
-test("the now row carries the location alone when the model is unknown", () => {
+test("the current row appends a worktree cue after repo ⎇ branch when inside a worktree", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    location: { name: "claude-usage-meter", branch: "side", worktree: "wt-1" },
+  });
+  const now = line.split("\n")[0] ?? "";
+  assert.match(
+    now,
+    /^current {2}opus 4\.8 · claude-usage-meter ⎇ side ⌂ wt-1$/,
+  );
+});
+
+test("the worktree cue is painted dim and distinct from the branch glyph", () => {
+  const now =
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: true,
+      location: { name: "repo", branch: "side", worktree: "wt-1" },
+    }).split("\n")[0] ?? "";
+  assert.ok(now.includes(`${ANSI.dim}⌂${ANSI.reset}`), "dim worktree glyph");
+});
+
+test("a location without a worktree renders the current row unchanged", () => {
+  const withWorktree = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    location: { name: "repo", branch: "main" },
+  });
+  const now = withWorktree.split("\n")[0] ?? "";
+  assert.match(now, /^current {2}opus 4\.8 · repo ⎇ main$/);
+  assert.ok(!now.includes("⌂"), "no worktree glyph without a worktree");
+});
+
+test("the current row carries the location alone when the model is unknown", () => {
   const line = renderLine(parsePayload({}), fixtureNow, {
     color: false,
     location: { name: "claude-usage-meter", branch: "main" },
   });
-  assert.match(line.split("\n")[0] ?? "", /^now {5}claude-usage-meter ⎇ main$/);
+  assert.match(
+    line.split("\n")[0] ?? "",
+    /^current {2}claude-usage-meter ⎇ main$/,
+  );
 });
 
-test("with neither model nor location the now row is omitted", () => {
+test("with neither model nor location the current row is omitted", () => {
   const line = renderLine(
     parsePayload({ cost: { total_cost_usd: 1 } }),
     fixtureNow,
     { color: false },
   );
-  assert.ok(!line.startsWith("now "), "no leading now row");
-  assert.ok(!line.includes("\nnow "), "no now row anywhere");
+  assert.ok(!line.startsWith("current "), "no leading current row");
+  assert.ok(!line.includes("\ncurrent "), "no current row anywhere");
 });
 
 test("the limits row starts with ctx — the model is no longer pinned here", () => {
   const limits = fullRender(false).split("\n")[1] ?? "";
-  assert.match(limits, /^limits {2}ctx /);
-  assert.ok(!/^limits {2}opus/.test(limits), "no model pin on the limits row");
+  assert.match(limits, /^limits {3}ctx /);
+  assert.ok(!/^limits {3}opus/.test(limits), "no model pin on the limits row");
   assert.match(limits, /ctx .* 24%/);
   assert.match(limits, /5h .* 52% ⟳ 2h00m/);
-  assert.match(limits, /7d .* 68% ⟳ 2d3h/);
+  assert.match(limits, /7d .* 68% ⟳ 2d3h \(\w{3} \d\d\.\d\d\)$/);
+  // Only the 7d cell carries the absolute reset day — exactly one "(" in the row.
+  assert.equal((limits.match(/\(/g) ?? []).length, 1, "only 7d shows a date");
 });
 
 test("the spend row is cost-forward with the mdl self-label and Σ labels", () => {
@@ -143,8 +179,8 @@ test("the fleet row leads with the mdl self-label count Σ total, no mo, plus ac
 
 test("multi-field rows join with a dot separator, none dangling", () => {
   const rows = fullRender(false).split("\n");
-  // limits (ctx · 5h · 7d) and spend (ses · mdl · Σ) carry separators; the now
-  // row is a single model cell and the fleet row a single count cell — no dot.
+  // limits (ctx · 5h · 7d) and spend (ses · mdl · Σ) carry separators; the
+  // current row is a single model cell and the fleet row a single count cell.
   assert.ok((rows[1] ?? "").includes(" · "), "limits joins its fields");
   assert.ok((rows[2] ?? "").includes(" · "), "spend joins its fields");
   for (const row of rows) {
@@ -222,23 +258,23 @@ test("an empty payload still renders a model fallback rather than throwing", () 
 });
 
 test("row labels pad to a common visible width with colour on and off", () => {
-  // Plain rows: the label prefix is exactly the 6-wide gutter then a 2-space gap.
+  // Plain rows: the label prefix is exactly the 7-wide gutter then a 2-space gap.
   for (const row of fullRender(false).split("\n")) {
-    assert.equal(row.slice(0, 6).trimEnd().length <= 6, true);
+    assert.equal(row.slice(0, 7).trimEnd().length <= 7, true);
     assert.equal(
-      row.slice(6, 8),
+      row.slice(7, 9),
       "  ",
-      "a 2-space gap follows the 6-wide gutter",
+      "a 2-space gap follows the 7-wide gutter",
     );
   }
   // Painted rows: stripping the non-printing SGR codes recovers the same
-  // 6-wide visible gutter — padding must not count the escape bytes.
+  // 7-wide visible gutter — padding must not count the escape bytes.
   for (const row of fullRender(true).split("\n")) {
     const label = row.slice(0, row.indexOf("\x1b[0m") + 4);
     assert.equal(
       visibleLength(label),
-      6,
-      "visible gutter width is 6 with colour on",
+      7,
+      "visible gutter width is 7 with colour on",
     );
   }
 });

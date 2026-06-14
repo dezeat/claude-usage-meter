@@ -83,3 +83,18 @@ export function formatCountdown(secondsUntil: number): string {
   const hours = totalHours % 24;
   return `${days}d${hours}h`;
 }
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
+
+// The absolute wall-clock day a window resets, as `Ddd DD.MM` ("Tue 16.06") —
+// the human anchor a multi-day countdown lacks. resetsAt is Unix epoch seconds
+// (the payload's unit). Components are read in the host's local timezone so the
+// day matches the user's clock; the only input is the timestamp, so it stays
+// pure and deterministic under a fixed timezone.
+export function formatResetDate(resetsAtSeconds: number): string {
+  const d = new Date(resetsAtSeconds * 1000);
+  const weekday = WEEKDAYS[d.getDay()] ?? "";
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  return `${weekday} ${dd}.${mm}`;
+}
