@@ -13,13 +13,22 @@ import { type ParsedPayload, type RateWindow } from "./payload.js";
 
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
 
-const ROW_LABELS = ["limits", "spend", "fleet"] as const;
+const ROW_LABELS = ["now", "limits", "spend", "fleet"] as const;
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
+
+// Where the session is rooted: the repo (or plain dir) name, plus the git
+// branch when inside a repo. Resolved at the edge (location.ts) off the payload
+// cwd; the formatter here stays pure and never touches the filesystem.
+export interface Location {
+  name: string;
+  branch?: string;
+}
 
 interface RenderOptions {
   color?: boolean;
   index?: CrossSessionIndex | null;
   indexPath?: string;
+  location?: Location;
 }
 
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
@@ -80,6 +89,31 @@ function activeClass(payload: ParsedPayload): string {
   return "unknown";
 }
 
+// The identity row: which model is running and where. Model display name is
+// lowercased to sit in the same key as the dim class labels below ("opus 4.8",
+// not "Opus 4.8"); the location is a bright repo/dir name with the branch after
+// a dim ⎇ glyph (dropped outside a repo). Either cell may be absent — joinFields
+// drops the empty one, and an empty row is omitted by the caller.
+function nowCells(
+  payload: ParsedPayload,
+  location: Location | undefined,
+  color: boolean,
+): string[] {
+  const cells: string[] = [];
+  if (payload.modelName !== undefined) {
+    cells.push(paint(payload.modelName.toLowerCase(), "brightWhite", color));
+  }
+  if (location !== undefined) {
+    const name = paint(location.name, "brightWhite", color);
+    cells.push(
+      location.branch !== undefined
+        ? `${name} ${paint("⎇", "dim", color)} ${location.branch}`
+        : name,
+    );
+  }
+  return cells;
+}
+
 function labelled(label: string, content: string, color: boolean): string {
   return `${paint(padVisible(label, GUTTER), "accent", color)}  ${content}`;
 }
@@ -92,6 +126,9 @@ export function renderLine(
   const color = options.color ?? true;
 
   const rows: string[] = [];
+
+  const nowRow = joinFields(nowCells(payload, options.location, color), color);
+  if (nowRow !== "") rows.push(labelled("now", nowRow, color));
 
   const limits = joinFields(limitsCells(payload, now, color), color);
   if (limits !== "") rows.push(labelled("limits", limits, color));
@@ -124,7 +161,7 @@ export function renderLine(
 
   if (rows.length === 0) {
     return labelled(
-      "limits",
+      "now",
       paint(payload.modelName ?? "Claude", "dim", color),
       color,
     );

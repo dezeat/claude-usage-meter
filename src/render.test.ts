@@ -67,16 +67,54 @@ test("placeholder is a non-empty single line", () => {
   assert.ok(!PLACEHOLDER_LINE.includes("\n"));
 });
 
-test("a full payload + index renders three rows labelled limits, spend, fleet in order", () => {
+test("a full payload + index renders four rows labelled now, limits, spend, fleet in order", () => {
   const rows = fullRender(false).split("\n");
-  assert.equal(rows.length, 3);
-  assert.match(rows[0] ?? "", /^limits /);
-  assert.match(rows[1] ?? "", /^spend /);
-  assert.match(rows[2] ?? "", /^fleet /);
+  assert.equal(rows.length, 4);
+  assert.match(rows[0] ?? "", /^now /);
+  assert.match(rows[1] ?? "", /^limits /);
+  assert.match(rows[2] ?? "", /^spend /);
+  assert.match(rows[3] ?? "", /^fleet /);
+});
+
+test("the now row shows the lowercased model and, given a location, repo ⎇ branch", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    location: { name: "claude-usage-meter", branch: "main" },
+  });
+  const now = line.split("\n")[0] ?? "";
+  assert.match(now, /^now {5}opus 4\.8 · claude-usage-meter ⎇ main$/);
+});
+
+test("the now row drops the branch glyph outside a repo, showing the dir basename", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    location: { name: "some-dir" },
+  });
+  const now = line.split("\n")[0] ?? "";
+  assert.match(now, /^now {5}opus 4\.8 · some-dir$/);
+  assert.ok(!now.includes("⎇"), "no branch glyph without a branch");
+});
+
+test("the now row carries the location alone when the model is unknown", () => {
+  const line = renderLine(parsePayload({}), fixtureNow, {
+    color: false,
+    location: { name: "claude-usage-meter", branch: "main" },
+  });
+  assert.match(line.split("\n")[0] ?? "", /^now {5}claude-usage-meter ⎇ main$/);
+});
+
+test("with neither model nor location the now row is omitted", () => {
+  const line = renderLine(
+    parsePayload({ cost: { total_cost_usd: 1 } }),
+    fixtureNow,
+    { color: false },
+  );
+  assert.ok(!line.startsWith("now "), "no leading now row");
+  assert.ok(!line.includes("\nnow "), "no now row anywhere");
 });
 
 test("the limits row starts with ctx — the model is no longer pinned here", () => {
-  const limits = fullRender(false).split("\n")[0] ?? "";
+  const limits = fullRender(false).split("\n")[1] ?? "";
   assert.match(limits, /^limits {2}ctx /);
   assert.ok(!/^limits {2}opus/.test(limits), "no model pin on the limits row");
   assert.match(limits, /ctx .* 24%/);
@@ -84,16 +122,16 @@ test("the limits row starts with ctx — the model is no longer pinned here", ()
   assert.match(limits, /7d .* 68% ⟳ 2d3h/);
 });
 
-test("the spend row is cost-forward with the model class and Σ labels", () => {
-  const spend = fullRender(false).split("\n")[1] ?? "";
+test("the spend row is cost-forward with the mdl self-label and Σ labels", () => {
+  const spend = fullRender(false).split("\n")[2] ?? "";
   assert.match(spend, /ses \$3\.45 1\.2M/);
-  assert.match(spend, /opus \$/);
+  assert.match(spend, /mdl \$/);
   assert.match(spend, /Σ \$/);
 });
 
-test("the fleet row leads with the model class count Σ total, no mo, plus active", () => {
-  const fleet = fullRender(false).split("\n")[2] ?? "";
-  assert.match(fleet, /opus 1 Σ 1/);
+test("the fleet row leads with the mdl self-label count Σ total, no mo, plus active", () => {
+  const fleet = fullRender(false).split("\n")[3] ?? "";
+  assert.match(fleet, /mdl 1 Σ 1/);
   assert.ok(!fleet.includes("mo"), "the mo qualifier is dropped");
   assert.ok(!fleet.includes("/"), "the count cell uses ' Σ ', never a slash");
   // The current session is the only live opus → the active cell is omitted.
@@ -105,10 +143,10 @@ test("the fleet row leads with the model class count Σ total, no mo, plus activ
 
 test("multi-field rows join with a dot separator, none dangling", () => {
   const rows = fullRender(false).split("\n");
-  // limits (ctx · 5h · 7d) and spend (ses · opus · Σ) carry separators;
-  // the fleet row here is a single self-excluded count cell, so no dot.
-  assert.ok((rows[0] ?? "").includes(" · "), "limits joins its fields");
-  assert.ok((rows[1] ?? "").includes(" · "), "spend joins its fields");
+  // limits (ctx · 5h · 7d) and spend (ses · mdl · Σ) carry separators; the now
+  // row is a single model cell and the fleet row a single count cell — no dot.
+  assert.ok((rows[1] ?? "").includes(" · "), "limits joins its fields");
+  assert.ok((rows[2] ?? "").includes(" · "), "spend joins its fields");
   for (const row of rows) {
     assert.ok(!row.endsWith(" · "), "no trailing separator");
     assert.ok(!/^\S+ {2}· /.test(row), "no leading separator after the label");
@@ -121,7 +159,7 @@ test("fewer limit fields mean fewer separators with no dangling dot", () => {
     fixtureNow,
     { color: false },
   );
-  const limits = degraded.split("\n")[0] ?? "";
+  const limits = degraded.split("\n")[1] ?? "";
   // Only ctx remains (no pin, no 5h/7d) → no field separator at all.
   const separators = limits.split(" · ").length - 1;
   assert.equal(separators, 0, "ctx alone has no separator");
@@ -129,7 +167,7 @@ test("fewer limit fields mean fewer separators with no dangling dot", () => {
 });
 
 test("the cost is painted brightWhite ahead of its tokens in the spend row", () => {
-  const spend = fullRender(true).split("\n")[1] ?? "";
+  const spend = fullRender(true).split("\n")[2] ?? "";
   assert.ok(
     spend.includes(`${ANSI.brightWhite}$3.45${ANSI.reset}`),
     "the session cost is bright",
@@ -138,14 +176,14 @@ test("the cost is painted brightWhite ahead of its tokens in the spend row", () 
 
 test("every bar colours by the flat rule for both context and the limit bars", () => {
   // ctx 24% green, 5h 52% yellow, 7d 68% yellow.
-  const limits = fullRender(true).split("\n")[0] ?? "";
+  const limits = fullRender(true).split("\n")[1] ?? "";
   assert.ok(limits.includes(ANSI.green), "ctx at 24% is green");
   assert.ok(limits.includes(ANSI.yellow), "5h/7d in the 51-70 band are yellow");
   assert.ok(!limits.includes(ANSI.red), "nothing is in the red band here");
 });
 
 test("the limit bars keep the │ pace marker without it driving cell colour", () => {
-  const limits = fullRender(true).split("\n")[0] ?? "";
+  const limits = fullRender(true).split("\n")[1] ?? "";
   assert.ok(limits.includes("│"), "the pace marker is present on 5h/7d");
 });
 
@@ -155,7 +193,7 @@ test("without rate_limits the limits row omits 5h/7d and the render still succee
     fixtureNow,
     { color: false },
   );
-  const limits = degraded.split("\n")[0] ?? "";
+  const limits = degraded.split("\n")[1] ?? "";
   assert.match(limits, /^limits /);
   assert.match(limits, /ctx .* 13%/);
   assert.ok(!limits.includes("5h"));

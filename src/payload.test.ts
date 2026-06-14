@@ -69,6 +69,7 @@ test("a non-object payload parses to an empty result", () => {
     sevenDay: undefined,
     sessionId: undefined,
     transcriptPath: undefined,
+    cwd: undefined,
   });
   assert.deepEqual(parsePayload("nonsense").fiveHour, undefined);
 });
@@ -99,4 +100,22 @@ test("non-string session_id and transcript_path are ignored, not coerced", () =>
 
   assert.equal(parsed.sessionId, undefined);
   assert.equal(parsed.transcriptPath, undefined);
+});
+
+test("cwd prefers workspace.current_dir over the top-level cwd", () => {
+  const parsed = parsePayload({
+    cwd: "/home/u/fallback",
+    workspace: { current_dir: "/home/u/project", project_dir: "/home/u" },
+  });
+
+  assert.equal(parsed.cwd, "/home/u/project");
+});
+
+test("cwd falls back to the top-level field when workspace is absent", () => {
+  assert.equal(parsePayload({ cwd: "/home/u/project" }).cwd, "/home/u/project");
+});
+
+test("a non-string cwd is ignored rather than coerced", () => {
+  assert.equal(parsePayload({ cwd: 42 }).cwd, undefined);
+  assert.equal(parsePayload({ workspace: { current_dir: 42 } }).cwd, undefined);
 });

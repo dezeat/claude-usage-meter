@@ -27,6 +27,7 @@ export function parsePayload(value) {
     const cost = asRecord(root.cost);
     const context = asRecord(root.context_window);
     const limits = asRecord(root.rate_limits);
+    const workspace = asRecord(root.workspace);
     return {
         modelId: model ? asString(model.id) : undefined,
         modelName: model ? asString(model.display_name) : undefined,
@@ -36,5 +37,10 @@ export function parsePayload(value) {
         sevenDay: limits ? parseWindow(limits.seven_day) : undefined,
         sessionId: asString(root.session_id),
         transcriptPath: asString(root.transcript_path),
+        // The session's working dir, used to resolve the repo/branch at the edge.
+        // Claude Code nests it under workspace.current_dir; the top-level cwd is the
+        // older/fallback spelling.
+        cwd: (workspace ? asString(workspace.current_dir) : undefined) ??
+            asString(root.cwd),
     };
 }

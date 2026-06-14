@@ -4,7 +4,7 @@ import { renderFleet } from "./fleet-render.js";
 import { modelClass } from "./index-store.js";
 import {} from "./payload.js";
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
-const ROW_LABELS = ["limits", "spend", "fleet"];
+const ROW_LABELS = ["now", "limits", "spend", "fleet"];
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
 // flanked by spaces. Empty cells are dropped so an absent field leaves no
@@ -46,12 +46,33 @@ function activeClass(payload) {
         return modelClass(payload.modelName.toLowerCase());
     return "unknown";
 }
+// The identity row: which model is running and where. Model display name is
+// lowercased to sit in the same key as the dim class labels below ("opus 4.8",
+// not "Opus 4.8"); the location is a bright repo/dir name with the branch after
+// a dim ⎇ glyph (dropped outside a repo). Either cell may be absent — joinFields
+// drops the empty one, and an empty row is omitted by the caller.
+function nowCells(payload, location, color) {
+    const cells = [];
+    if (payload.modelName !== undefined) {
+        cells.push(paint(payload.modelName.toLowerCase(), "brightWhite", color));
+    }
+    if (location !== undefined) {
+        const name = paint(location.name, "brightWhite", color);
+        cells.push(location.branch !== undefined
+            ? `${name} ${paint("⎇", "dim", color)} ${location.branch}`
+            : name);
+    }
+    return cells;
+}
 function labelled(label, content, color) {
     return `${paint(padVisible(label, GUTTER), "accent", color)}  ${content}`;
 }
 export function renderLine(payload, now, options = {}) {
     const color = options.color ?? true;
     const rows = [];
+    const nowRow = joinFields(nowCells(payload, options.location, color), color);
+    if (nowRow !== "")
+        rows.push(labelled("now", nowRow, color));
     const limits = joinFields(limitsCells(payload, now, color), color);
     if (limits !== "")
         rows.push(labelled("limits", limits, color));
@@ -71,7 +92,7 @@ export function renderLine(payload, now, options = {}) {
         rows.push(labelled("spend", ses, color));
     }
     if (rows.length === 0) {
-        return labelled("limits", paint(payload.modelName ?? "Claude", "dim", color), color);
+        return labelled("now", paint(payload.modelName ?? "Claude", "dim", color), color);
     }
     return rows.join("\n");
 }
