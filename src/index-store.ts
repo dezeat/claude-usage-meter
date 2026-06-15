@@ -8,13 +8,34 @@ import {
   getSession,
   allSessions,
   upsertSession,
+  upsertAccountLimit,
+  getAccountLimit,
   countSessionsByClassForMonth,
   countLiveSessionsByClass,
   monthClassSpendRows,
   type SessionRow,
+  type LimitWindowKind,
 } from "./db.js";
+import { type RateWindow } from "./payload.js";
 
 export type { ModelUsage };
+
+// One session's current 5h/7d observation off its stdin payload, stamped with the
+// edge's wall clock. Fed into updateIndex so the shared store learns the freshest
+// account-wide windows (Discussion #63, Part 1).
+export interface LimitsObservation {
+  fiveHour?: RateWindow;
+  sevenDay?: RateWindow;
+  observedAt: number;
+}
+
+// The freshest account-wide windows resolved across all sessions. A window is
+// undefined when neither the store nor this render's payload has it; the renderer
+// then omits that bar.
+export interface ResolvedLimits {
+  fiveHour?: RateWindow;
+  sevenDay?: RateWindow;
+}
 
 export interface SessionRecord {
   path: string;
@@ -42,6 +63,10 @@ export interface CrossSessionIndex {
     { tokens: Record<string, ModelUsage>; costUsd: number }
   >;
   updatedAt: number;
+  // The freshest account-wide 5h/7d windows across all sessions, resolved at the
+  // edge while the db handle is open (Discussion #63, Part 1). Absent for the
+  // report path (materializeIndex), which has no statusline limits row to draw.
+  limits?: ResolvedLimits;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -373,10 +398,53 @@ function upsertTranscript(
   return true;
 }
 
+// Persist this session's 5h/7d observation (monotonic LWW, see upsertAccountLimit)
+// and read back the freshest stored window per kind, degrading to this render's
+// own payload window when the store has never seen it. Rides the already-open db
+// handle so the hot path adds one conditional upsert + one SELECT per window. Each
+// store touch is wrapped so a locked/absent row degrades to the local payload —
+// the never-throw safety net (Discussion #63, Part 1).
+function resolveLimits(
+  db: ReturnType<typeof openDb>,
+  observation: LimitsObservation,
+): ResolvedLimits {
+  const resolve = (
+    kind: LimitWindowKind,
+    local: RateWindow | undefined,
+  ): RateWindow | undefined => {
+    if (local !== undefined) {
+      try {
+        upsertAccountLimit(db, {
+          kind,
+          usedPercentage: local.usedPercentage,
+          resetsAt: local.resetsAt,
+          observedAt: observation.observedAt,
+        });
+      } catch {
+        // A locked store must never blank the bar; the local payload still renders.
+      }
+    }
+    let stored;
+    try {
+      stored = getAccountLimit(db, kind);
+    } catch {
+      stored = undefined;
+    }
+    if (stored === undefined) return local;
+    return { usedPercentage: stored.usedPercentage, resetsAt: stored.resetsAt };
+  };
+
+  return {
+    fiveHour: resolve("five_hour", observation.fiveHour),
+    sevenDay: resolve("seven_day", observation.sevenDay),
+  };
+}
+
 export async function updateIndex(
   indexPath: string,
   claudeDir: string,
   pricingTable: PricingTable,
+  observation?: LimitsObservation,
 ): Promise<CrossSessionIndex> {
   const db = openDb(indexPath);
 
@@ -393,7 +461,11 @@ export async function updateIndex(
     upsertTranscript(db, transcriptPath, pricingTable);
   }
 
+  const limits =
+    observation === undefined ? undefined : resolveLimits(db, observation);
+
   const index = materializeIndex(allSessions(db), Date.now());
+  if (limits !== undefined) index.limits = limits;
   db.close();
   return index;
 }
