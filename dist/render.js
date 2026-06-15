@@ -1,7 +1,7 @@
 import { paint, padVisible } from "./ansi.js";
 import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, contextBar, elapsedFraction, formatCountdown, formatResetDate, paceBar, } from "./bars.js";
 import { costForward, renderFleet } from "./fleet-render.js";
-import { modelClass } from "./index-store.js";
+import { modelClass, } from "./index-store.js";
 import {} from "./payload.js";
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
 const ROW_LABELS = ["current", "limits", "spend", "fleet"];
@@ -26,17 +26,22 @@ function renderLimit(label, window, windowSeconds, now, color, showResetDate = f
     const reset = paint(`⟳ ${formatCountdown(remainingSeconds)}${absolute}`, "dim", color);
     return `${label} ${bar} ${percentage} ${reset}`;
 }
-function limitsCells(payload, now, color) {
+function limitsCells(payload, limits, now, color) {
     const cells = [];
+    // ctx is legitimately per-session, so it always renders from the local payload.
+    // The 5h/7d windows are account-wide: prefer the freshest cross-session window
+    // resolved at the edge, falling back to this session's own payload snapshot.
+    const fiveHour = limits?.fiveHour ?? payload.fiveHour;
+    const sevenDay = limits?.sevenDay ?? payload.sevenDay;
     if (payload.contextPercentage !== undefined) {
         const bar = contextBar(payload.contextPercentage, color);
         cells.push(`ctx ${bar} ${Math.round(payload.contextPercentage)}%`);
     }
-    if (payload.fiveHour) {
-        cells.push(renderLimit("5h", payload.fiveHour, FIVE_HOUR_SECONDS, now, color));
+    if (fiveHour) {
+        cells.push(renderLimit("5h", fiveHour, FIVE_HOUR_SECONDS, now, color));
     }
-    if (payload.sevenDay) {
-        cells.push(renderLimit("7d", payload.sevenDay, SEVEN_DAY_SECONDS, now, color, true));
+    if (sevenDay) {
+        cells.push(renderLimit("7d", sevenDay, SEVEN_DAY_SECONDS, now, color, true));
     }
     return cells;
 }
@@ -85,7 +90,7 @@ export function renderLine(payload, now, options = {}) {
     const currentRow = joinFields(currentCells(payload, options.location, color), color);
     if (currentRow !== "")
         rows.push(labelled("current", currentRow, color));
-    const limits = joinFields(limitsCells(payload, now, color), color);
+    const limits = joinFields(limitsCells(payload, options.limits, now, color), color);
     if (limits !== "")
         rows.push(labelled("limits", limits, color));
     const index = options.index ?? null;

@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {} from "./aggregate.js";
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 function isLockedError(err) {
     return err instanceof Error && err.message.toLowerCase().includes("locked");
 }
@@ -36,23 +36,58 @@ function isDuplicateColumnError(err) {
     return (err instanceof Error &&
         err.message.toLowerCase().includes("duplicate column"));
 }
-// Upgrade an older on-disk DB in place. A fresh DB is already current from openDb's
-// CREATE TABLE, so this only matters for a pre-existing one. v1 -> v2 adds the
-// parent_session_id column for subagent attribution (ADR-0001). The ALTER is
-// idempotent: a freshly created table already has the column, and two worktrees can
-// race to migrate the same old DB — both surface as "duplicate column", which we
-// tolerate. busy_timeout covers the schema-lock contention, like the WAL switch.
+// Two worktrees can race to migrate the same fresh DB, so every migration step is
+// idempotent and tolerates the "already done" error a loser sees. `IF NOT EXISTS`
+// covers the table/index DDL; the v1->v2 ALTER has no such clause and surfaces as
+// "duplicate column" on the second writer, which we swallow.
+// v2 -> v3: the account-wide rate-limit store (Discussion #63, Part 1) and the
+// read-path indexes (#63, H3). The sessions table has only its session_id PRIMARY
+// KEY, so every month/class/liveness aggregate is a full scan; these indexes turn
+// them into O(matching rows). Created once here, gated by user_version, so a hot
+// idle tick never re-runs the DDL. CREATE INDEX/TABLE IF NOT EXISTS keeps the
+// concurrent-open race a no-op rather than a throw.
+function migrateToV3(db) {
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS account_limits (
+      window_kind     TEXT PRIMARY KEY,
+      used_percentage REAL,
+      resets_at       INTEGER,
+      observed_at     INTEGER NOT NULL
+    )
+  `);
+    createReadIndexes(db);
+}
+// The composite (month, model_class) covers both month-scoped aggregates
+// (countSessionsByClassForMonth, monthClassSpendRows); last_ts covers the live
+// query. parent_session_id is in the month index's leading filter via month, but
+// the liveness filter also tests it — keeping it out keeps the index narrow and
+// the residual predicate cheap.
+function createReadIndexes(db) {
+    db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_month_class ON sessions (month, model_class)");
+    db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_last_ts ON sessions (last_ts)");
+}
+// Upgrade an older on-disk DB in place along a version ladder. A fresh DB starts at
+// user_version 0 and walks every step; a pre-existing one resumes at its stored
+// version. Each step is idempotent (see the race note above), so a freshly CREATEd
+// table re-applying a step is harmless. busy_timeout covers schema-lock contention,
+// like the WAL switch.
 function migrateSchema(db) {
-    if (schemaVersion(db) >= 2)
-        return;
-    try {
-        db.exec("ALTER TABLE sessions ADD COLUMN parent_session_id TEXT");
+    const version = schemaVersion(db);
+    // v1 -> v2 adds parent_session_id for subagent attribution (ADR-0001).
+    if (version < 2) {
+        try {
+            db.exec("ALTER TABLE sessions ADD COLUMN parent_session_id TEXT");
+        }
+        catch (err) {
+            if (!isDuplicateColumnError(err))
+                throw err;
+        }
+        db.exec("PRAGMA user_version = 2");
     }
-    catch (err) {
-        if (!isDuplicateColumnError(err))
-            throw err;
+    if (version < 3) {
+        migrateToV3(db);
+        db.exec("PRAGMA user_version = 3");
     }
-    db.exec("PRAGMA user_version = 2");
 }
 // The DB is the cross-session store, one row per Claude Code session keyed by
 // session_id (the transcript UUID). It replaces the rewritten index.json: a
@@ -219,4 +254,42 @@ export function upsertSession(db, row) {
        month             = excluded.month,
        tokens_json       = excluded.tokens_json,
        parent_session_id = excluded.parent_session_id`).run(row.sessionId, row.path, row.branch, row.modelClass, row.costUsd, row.lastTs, row.byteOffset, row.month, JSON.stringify(row.tokens), row.parentSessionId);
+}
+// Persist one account-wide window observation, last-writer-wins by observed_at.
+// The `WHERE excluded.observed_at > observed_at` guard makes the upsert monotonic:
+// a laggy session whose snapshot is older than the stored one cannot regress the
+// shared value, so the row always holds the freshest observation (Discussion #63,
+// Part 1). The conflict target is the window_kind primary key — exactly one row
+// per window.
+export function upsertAccountLimit(db, row) {
+    db.prepare(`INSERT INTO account_limits
+       (window_kind, used_percentage, resets_at, observed_at)
+     VALUES (?, ?, ?, ?)
+     ON CONFLICT(window_kind) DO UPDATE SET
+       used_percentage = excluded.used_percentage,
+       resets_at       = excluded.resets_at,
+       observed_at     = excluded.observed_at
+     WHERE excluded.observed_at > account_limits.observed_at`).run(row.kind, row.usedPercentage, row.resetsAt, row.observedAt);
+}
+function toAccountLimitRow(raw) {
+    if (raw.used_percentage === null || raw.resets_at === null)
+        return undefined;
+    if (raw.window_kind !== "five_hour" && raw.window_kind !== "seven_day") {
+        return undefined;
+    }
+    return {
+        kind: raw.window_kind,
+        usedPercentage: raw.used_percentage,
+        resetsAt: raw.resets_at,
+        observedAt: raw.observed_at,
+    };
+}
+// The freshest stored observation for one window, or undefined when the store has
+// never seen it (first install, wiped DB). The caller degrades to the local
+// payload on undefined — absence is not zero usage.
+export function getAccountLimit(db, kind) {
+    const raw = db
+        .prepare("SELECT * FROM account_limits WHERE window_kind = ?")
+        .get(kind);
+    return raw === undefined ? undefined : toAccountLimitRow(raw);
 }
