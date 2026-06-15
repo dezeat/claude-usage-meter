@@ -1017,3 +1017,130 @@ test("subagent tokens are credited to the parent session, counted under their ow
   // The child row exists, tagged with its parent.
   assert.strictEqual(index.sessions["agent-x"]?.parentSessionId, PARENT);
 });
+
+// ---------------------------------------------------------------------------
+// Cross-session limits sync: freshest account-wide 5h/7d wins (Discussion #63)
+// ---------------------------------------------------------------------------
+
+test("updateIndex without a limits observation leaves index.limits undefined (report/back-compat path)", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "s.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const dbPath = join(tmp, "index.db");
+
+  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+  assert.strictEqual(index.limits, undefined);
+});
+
+test("updateIndex persists this session's 5h/7d snapshot and returns it as the freshest when the store was empty", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "s.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const dbPath = join(tmp, "index.db");
+
+  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING, {
+    fiveHour: { usedPercentage: 40, resetsAt: 1000 },
+    sevenDay: { usedPercentage: 70, resetsAt: 9000 },
+    observedAt: 100,
+  });
+  assert.deepStrictEqual(index.limits?.fiveHour, {
+    usedPercentage: 40,
+    resetsAt: 1000,
+  });
+  assert.deepStrictEqual(index.limits?.sevenDay, {
+    usedPercentage: 70,
+    resetsAt: 9000,
+  });
+});
+
+test("a later observation wins across sessions — the freshest 5h usage is rendered, not the laggy one", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "s.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const dbPath = join(tmp, "index.db");
+
+  // Session A observes 40% at t=100; session B observes the fresher 55% at t=200.
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING, {
+    fiveHour: { usedPercentage: 40, resetsAt: 1000 },
+    observedAt: 100,
+  });
+  const indexB = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING, {
+    fiveHour: { usedPercentage: 55, resetsAt: 1200 },
+    observedAt: 200,
+  });
+  assert.strictEqual(indexB.limits?.fiveHour?.usedPercentage, 55);
+
+  // A laggy session A re-renders with its stale t=150 snapshot: the store's
+  // fresher t=200 value wins, so this session renders 55, not its own 45.
+  const indexAlate = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    {
+      fiveHour: { usedPercentage: 45, resetsAt: 1100 },
+      observedAt: 150,
+    },
+  );
+  assert.strictEqual(
+    indexAlate.limits?.fiveHour?.usedPercentage,
+    55,
+    "the freshest cross-session observation wins over the local laggy payload",
+  );
+});
+
+test("a session with no 5h payload still reads the freshest stored window so it is not blank", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "s.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const dbPath = join(tmp, "index.db");
+
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING, {
+    fiveHour: { usedPercentage: 62, resetsAt: 1000 },
+    observedAt: 100,
+  });
+  // This session's payload carries no 5h window; it must surface the stored one.
+  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING, {
+    observedAt: 200,
+  });
+  assert.strictEqual(index.limits?.fiveHour?.usedPercentage, 62);
+});

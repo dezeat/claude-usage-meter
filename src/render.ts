@@ -9,7 +9,11 @@ import {
   paceBar,
 } from "./bars.js";
 import { costForward, renderFleet } from "./fleet-render.js";
-import { type CrossSessionIndex, modelClass } from "./index-store.js";
+import {
+  type CrossSessionIndex,
+  type ResolvedLimits,
+  modelClass,
+} from "./index-store.js";
 import { type ParsedPayload, type RateWindow } from "./payload.js";
 
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
@@ -33,6 +37,10 @@ interface RenderOptions {
   index?: CrossSessionIndex | null;
   indexPath?: string;
   location?: Location;
+  // The freshest account-wide 5h/7d windows resolved at the edge (Discussion #63,
+  // Part 1). Pure here: values in, no fs. When a window is absent the limits row
+  // falls back to the payload's own snapshot; ctx always comes from the payload.
+  limits?: ResolvedLimits;
 }
 
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
@@ -70,23 +78,28 @@ function renderLimit(
 
 function limitsCells(
   payload: ParsedPayload,
+  limits: ResolvedLimits | undefined,
   now: Date,
   color: boolean,
 ): string[] {
   const cells: string[] = [];
 
+  // ctx is legitimately per-session, so it always renders from the local payload.
+  // The 5h/7d windows are account-wide: prefer the freshest cross-session window
+  // resolved at the edge, falling back to this session's own payload snapshot.
+  const fiveHour = limits?.fiveHour ?? payload.fiveHour;
+  const sevenDay = limits?.sevenDay ?? payload.sevenDay;
+
   if (payload.contextPercentage !== undefined) {
     const bar = contextBar(payload.contextPercentage, color);
     cells.push(`ctx ${bar} ${Math.round(payload.contextPercentage)}%`);
   }
-  if (payload.fiveHour) {
-    cells.push(
-      renderLimit("5h", payload.fiveHour, FIVE_HOUR_SECONDS, now, color),
-    );
+  if (fiveHour) {
+    cells.push(renderLimit("5h", fiveHour, FIVE_HOUR_SECONDS, now, color));
   }
-  if (payload.sevenDay) {
+  if (sevenDay) {
     cells.push(
-      renderLimit("7d", payload.sevenDay, SEVEN_DAY_SECONDS, now, color, true),
+      renderLimit("7d", sevenDay, SEVEN_DAY_SECONDS, now, color, true),
     );
   }
 
@@ -152,7 +165,10 @@ export function renderLine(
   );
   if (currentRow !== "") rows.push(labelled("current", currentRow, color));
 
-  const limits = joinFields(limitsCells(payload, now, color), color);
+  const limits = joinFields(
+    limitsCells(payload, options.limits, now, color),
+    color,
+  );
   if (limits !== "") rows.push(labelled("limits", limits, color));
 
   const index = options.index ?? null;

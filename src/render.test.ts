@@ -158,6 +158,44 @@ test("the limits row starts with ctx — the model is no longer pinned here", ()
   assert.equal((limits.match(/\(/g) ?? []).length, 1, "only 7d shows a date");
 });
 
+test("resolved cross-session limits override the payload's own 5h/7d, while ctx stays from the payload", () => {
+  const fiveResets = promax.rate_limits.five_hour.resets_at;
+  // Same reset instant (so the 2h00m countdown is unchanged), fresher usage from
+  // another session: the row must render 80%, not the payload's 52%.
+  const limits =
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: false,
+      index: populatedIndex(),
+      indexPath: ":memory:",
+      limits: {
+        fiveHour: { usedPercentage: 80, resetsAt: fiveResets },
+        sevenDay: { usedPercentage: 90, resetsAt: fiveResets + 2 * 24 * 3600 },
+      },
+    }).split("\n")[1] ?? "";
+  assert.match(limits, /ctx .* 24%/, "ctx is the per-session payload value");
+  assert.match(limits, /5h .* 80% ⟳ 2h00m/, "5h shows the resolved 80%");
+  assert.ok(!limits.includes("52%"), "the payload's stale 5h is not rendered");
+  assert.match(limits, /7d .* 90%/, "7d shows the resolved 90%");
+});
+
+test("an absent resolved window falls back to the payload's own snapshot", () => {
+  // limits resolves only 5h; 7d is undefined, so the payload's 68% must show.
+  const limits =
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: false,
+      index: populatedIndex(),
+      indexPath: ":memory:",
+      limits: {
+        fiveHour: {
+          usedPercentage: 80,
+          resetsAt: promax.rate_limits.five_hour.resets_at,
+        },
+      },
+    }).split("\n")[1] ?? "";
+  assert.match(limits, /5h .* 80%/, "resolved 5h wins");
+  assert.match(limits, /7d .* 68%/, "absent 7d falls back to the payload");
+});
+
 test("the spend row is cost-forward with the mdl self-label and Σ labels", () => {
   const spend = fullRender(false).split("\n")[2] ?? "";
   assert.match(spend, /ses \$3\.45 1\.2M/);
