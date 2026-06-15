@@ -2,7 +2,8 @@ import { readFileSync, statSync, readdirSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { aggregateTranscript } from "./aggregate.js";
 import { cost } from "./pricing.js";
-import { openDb, getSession, allSessions, upsertSession, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, } from "./db.js";
+import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, } from "./db.js";
+import {} from "./payload.js";
 function asRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value)
         ? value
@@ -293,7 +294,44 @@ function upsertTranscript(db, transcriptPath, pricingTable) {
     upsertCount += 1;
     return true;
 }
-export async function updateIndex(indexPath, claudeDir, pricingTable) {
+// Persist this session's 5h/7d observation (monotonic LWW, see upsertAccountLimit)
+// and read back the freshest stored window per kind, degrading to this render's
+// own payload window when the store has never seen it. Rides the already-open db
+// handle so the hot path adds one conditional upsert + one SELECT per window. Each
+// store touch is wrapped so a locked/absent row degrades to the local payload —
+// the never-throw safety net (Discussion #63, Part 1).
+function resolveLimits(db, observation) {
+    const resolve = (kind, local) => {
+        if (local !== undefined) {
+            try {
+                upsertAccountLimit(db, {
+                    kind,
+                    usedPercentage: local.usedPercentage,
+                    resetsAt: local.resetsAt,
+                    observedAt: observation.observedAt,
+                });
+            }
+            catch {
+                // A locked store must never blank the bar; the local payload still renders.
+            }
+        }
+        let stored;
+        try {
+            stored = getAccountLimit(db, kind);
+        }
+        catch {
+            stored = undefined;
+        }
+        if (stored === undefined)
+            return local;
+        return { usedPercentage: stored.usedPercentage, resetsAt: stored.resetsAt };
+    };
+    return {
+        fiveHour: resolve("five_hour", observation.fiveHour),
+        sevenDay: resolve("seven_day", observation.sevenDay),
+    };
+}
+export async function updateIndex(indexPath, claudeDir, pricingTable, observation) {
     const db = openDb(indexPath);
     const transcripts = discoverTranscriptPaths(claudeDir);
     // Read-only tick invariant: the per-file `fileSize <= currentOffset` skip inside
@@ -306,7 +344,10 @@ export async function updateIndex(indexPath, claudeDir, pricingTable) {
     for (const transcriptPath of transcripts) {
         upsertTranscript(db, transcriptPath, pricingTable);
     }
+    const limits = observation === undefined ? undefined : resolveLimits(db, observation);
     const index = materializeIndex(allSessions(db), Date.now());
+    if (limits !== undefined)
+        index.limits = limits;
     db.close();
     return index;
 }

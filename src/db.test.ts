@@ -13,6 +13,8 @@ import {
   schemaVersion,
   SCHEMA_VERSION,
   upsertSession,
+  upsertAccountLimit,
+  getAccountLimit,
   countSessionsByClassForMonth,
   countLiveSessionsByClass,
   type SessionRow,
@@ -342,7 +344,7 @@ test("subagent rows (parent_session_id set) are excluded from month and live ses
   );
 });
 
-test("opening an existing v1 store migrates it to v2 in place, adding parent_session_id and preserving rows", () => {
+test("opening an existing v1 store walks the ladder to the current schema, adding parent_session_id and preserving rows", () => {
   const tmp = makeTmpDir();
   const dbPath = join(tmp, "v1.db");
 
@@ -362,11 +364,23 @@ test("opening an existing v1 store migrates it to v2 in place, adding parent_ses
   v1.close();
 
   const db = openDb(dbPath);
-  assert.strictEqual(schemaVersion(db), 2, "the store is migrated to v2");
+  // The ladder runs every step from the stored version up to the current schema,
+  // so a v1 store lands on SCHEMA_VERSION (now v3 with account_limits + indexes).
+  assert.strictEqual(
+    schemaVersion(db),
+    SCHEMA_VERSION,
+    "the store is migrated to the current schema version",
+  );
   const cols = (
     db.prepare("PRAGMA table_info(sessions)").all() as Array<{ name: string }>
   ).map((c) => c.name);
-  assert.ok(cols.includes("parent_session_id"), "the new column was added");
+  assert.ok(cols.includes("parent_session_id"), "the v2 column was added");
+  const tables = (
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  assert.ok(tables.includes("account_limits"), "the v3 table was added");
   const row = db
     .prepare(
       "SELECT session_id, parent_session_id FROM sessions WHERE session_id = ?",
@@ -378,6 +392,142 @@ test("opening an existing v1 store migrates it to v2 in place, adding parent_ses
     null,
     "and is treated as top-level",
   );
+  db.close();
+});
+
+test("an empty account_limits store reads back undefined so the caller can fall back to the local payload", () => {
+  const db = openDb(":memory:");
+  assert.strictEqual(getAccountLimit(db, "five_hour"), undefined);
+  assert.strictEqual(getAccountLimit(db, "seven_day"), undefined);
+  db.close();
+});
+
+test("the freshest account-limit observation wins — a later observed_at overwrites an earlier one", () => {
+  const db = openDb(":memory:");
+  upsertAccountLimit(db, {
+    kind: "five_hour",
+    usedPercentage: 40,
+    resetsAt: 1000,
+    observedAt: 100,
+  });
+  upsertAccountLimit(db, {
+    kind: "five_hour",
+    usedPercentage: 55,
+    resetsAt: 1200,
+    observedAt: 200,
+  });
+  const row = getAccountLimit(db, "five_hour");
+  db.close();
+  assert.deepStrictEqual(row, {
+    kind: "five_hour",
+    usedPercentage: 55,
+    resetsAt: 1200,
+    observedAt: 200,
+  });
+});
+
+test("a laggy account-limit observation with an older observed_at cannot regress the freshest stored value", () => {
+  const db = openDb(":memory:");
+  upsertAccountLimit(db, {
+    kind: "seven_day",
+    usedPercentage: 70,
+    resetsAt: 9000,
+    observedAt: 500,
+  });
+  // A second session whose snapshot is older than the stored one must not win.
+  upsertAccountLimit(db, {
+    kind: "seven_day",
+    usedPercentage: 60,
+    resetsAt: 8000,
+    observedAt: 300,
+  });
+  const row = getAccountLimit(db, "seven_day");
+  db.close();
+  assert.strictEqual(row?.usedPercentage, 70, "older observation was rejected");
+  assert.strictEqual(row?.observedAt, 500);
+});
+
+test("the 5h and 7d windows are stored independently under their own keys", () => {
+  const db = openDb(":memory:");
+  upsertAccountLimit(db, {
+    kind: "five_hour",
+    usedPercentage: 33,
+    resetsAt: 100,
+    observedAt: 10,
+  });
+  upsertAccountLimit(db, {
+    kind: "seven_day",
+    usedPercentage: 88,
+    resetsAt: 700,
+    observedAt: 10,
+  });
+  const five = getAccountLimit(db, "five_hour");
+  const seven = getAccountLimit(db, "seven_day");
+  db.close();
+  assert.strictEqual(five?.usedPercentage, 33);
+  assert.strictEqual(seven?.usedPercentage, 88);
+});
+
+test("a fresh store carries the H3 read indexes on month/model_class and last_ts", () => {
+  const db = openDb(":memory:");
+  const indexes = (
+    db.prepare("PRAGMA index_list(sessions)").all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  db.close();
+  assert.ok(
+    indexes.includes("idx_sessions_month_class"),
+    "the (month, model_class) index exists",
+  );
+  assert.ok(
+    indexes.includes("idx_sessions_last_ts"),
+    "the last_ts index exists",
+  );
+});
+
+test("opening an existing v2 store migrates it to v3 in place, adding account_limits and the read indexes", () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "v2.db");
+
+  // Hand-build a v2 store: the sessions schema with parent_session_id, no
+  // account_limits, no secondary indexes, stamped user_version 2.
+  const v2 = new DatabaseSync(dbPath);
+  v2.exec("PRAGMA journal_mode = WAL");
+  v2.exec(
+    `CREATE TABLE sessions (
+       session_id TEXT PRIMARY KEY, path TEXT NOT NULL, branch TEXT,
+       model_class TEXT, cost_usd REAL, last_ts INTEGER,
+       byte_offset INTEGER NOT NULL, month TEXT, tokens_json TEXT,
+       parent_session_id TEXT, machine_id TEXT)`,
+  );
+  v2.prepare(
+    "INSERT INTO sessions (session_id, path, byte_offset, model_class, month) VALUES (?, ?, ?, ?, ?)",
+  ).run("kept", "/fake/kept.jsonl", 5, "opus", "2026-06");
+  v2.exec("PRAGMA user_version = 2");
+  v2.close();
+
+  const db = openDb(dbPath);
+  assert.strictEqual(schemaVersion(db), 3, "the store is migrated to v3");
+
+  const tables = (
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  assert.ok(
+    tables.includes("account_limits"),
+    "the account_limits table was created",
+  );
+
+  const indexes = (
+    db.prepare("PRAGMA index_list(sessions)").all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  assert.ok(indexes.includes("idx_sessions_month_class"));
+  assert.ok(indexes.includes("idx_sessions_last_ts"));
+
+  const row = db
+    .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
+    .get("kept") as { session_id: string };
+  assert.strictEqual(row.session_id, "kept", "the pre-existing row survived");
   db.close();
 });
 
