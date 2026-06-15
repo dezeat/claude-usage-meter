@@ -61,17 +61,18 @@ test("a linked worktree surfaces the true repo name, its branch and the worktree
   assert.equal(loc?.worktree, "wt-feature");
 });
 
-test("a normal checkout (.git is a directory) carries no worktree", () => {
+test("the main working tree labels its worktree cell 'root'", () => {
   const root = makeRepo("ref: refs/heads/main\n");
   const loc = resolveLocation(root);
-  assert.equal(loc?.worktree, undefined);
+  assert.equal(loc?.worktree, "root");
 });
 
-test("outside any repo it falls back to the directory basename with no branch", () => {
+test("outside any repo it falls back to the directory basename, no branch, no worktree", () => {
   const dir = tmp();
   const loc = resolveLocation(dir);
   assert.equal(loc?.name, dir.split("/").pop());
   assert.equal(loc?.branch, undefined);
+  assert.equal(loc?.worktree, undefined);
 });
 
 test("an absent cwd yields no location at all", () => {

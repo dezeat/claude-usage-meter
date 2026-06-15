@@ -96,5 +96,5 @@ test("the reset date is the weekday and zero-padded DD.MM of the reset day", () 
   // 2026-06-16 is a Tuesday (calendar oracle); with TZ pinned to UTC the local
   // components equal the UTC ones, so the formatted day is deterministic.
   const resetsAt = Date.UTC(2026, 5, 16) / 1000; // month index 5 = June
-  assert.equal(formatResetDate(resetsAt), "Tue 16.06");
+  assert.equal(formatResetDate(resetsAt), "Tu 16.06");
 });
