@@ -350,6 +350,10 @@ function upsertTranscript(
 
   const folded = foldLines(existing, lines, new Set<string>());
 
+  // Persisted cost source (ADR-0004): the pricing-table calc over aggregated
+  // tokens is authoritative for everything stored — cross-session, month, Σ,
+  // report. The payload's cost.total_cost_usd is used only for the live,
+  // not-yet-indexed session, never for a persisted row.
   const usageByModel = { models: folded.tokens, skippedLines: 0 };
   const costs = cost(usageByModel, pricingTable);
 
