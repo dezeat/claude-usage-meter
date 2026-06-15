@@ -1,6 +1,11 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, dirname, isAbsolute, join } from "node:path";
 import {} from "./render.js";
+// git's "main working tree" (the original clone) has no name of its own — only
+// linked worktrees live under `.git/worktrees/<name>`. Label it "root" so the
+// cell always answers "which working tree" without colliding with a branch
+// named "main".
+const MAIN_WORKTREE = "root";
 // Resolve the session's working location from the payload cwd — repo name and
 // current branch — by reading `.git` off the filesystem. No subprocess, no
 // network: this re-runs on the statusline refreshInterval, so it must be cheap
@@ -13,13 +18,13 @@ export function resolveLocation(cwd) {
         const repo = findRepo(cwd);
         if (repo === undefined)
             return { name: basename(cwd) };
-        // In a linked worktree the *true* repo name comes from the gitdir path, not
-        // basename(root) (which is the worktree dir). The worktree cell is added
-        // only there; a normal checkout returns the same shape as before.
+        // The cell always answers "which working tree": a linked worktree by its
+        // name (with the *true* repo name from the gitdir path, not basename(root)
+        // which is the worktree dir), the main working tree as "root".
         return {
             name: repo.repoName ?? basename(repo.root),
             branch: readBranch(repo.gitDir),
-            ...(repo.worktree !== undefined && { worktree: repo.worktree }),
+            worktree: repo.worktree ?? MAIN_WORKTREE,
         };
     }
     catch {
