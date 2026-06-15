@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { type ModelUsage } from "./aggregate.js";
-import { cacheReadShare, sumUsage, tokenBreakdown } from "./format.js";
+import {
+  cacheReadShare,
+  formatUsd,
+  sumUsage,
+  tokenBreakdown,
+} from "./format.js";
 
 // Synthetic fixture mirroring the cache-read-dominated agentic profile from the
 // ticket. Hand-computed sums (the oracle), consistent with ccusage's four-way
@@ -37,6 +42,12 @@ test("the cache-read share is undefined when there are no tokens, so callers omi
     cacheCreationTokens: 0,
   };
   assert.strictEqual(cacheReadShare(empty), undefined);
+});
+
+test("a dollar figure renders as $d.dd — two fixed decimals, no separator (hand-computed)", () => {
+  assert.strictEqual(formatUsd(3.4), "$3.40");
+  assert.strictEqual(formatUsd(0), "$0.00");
+  assert.strictEqual(formatUsd(1234.5), "$1234.50");
 });
 
 test("summing a per-model token map adds each of the four kinds independently", () => {

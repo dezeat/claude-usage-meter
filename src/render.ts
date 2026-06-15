@@ -8,7 +8,7 @@ import {
   formatResetDate,
   paceBar,
 } from "./bars.js";
-import { renderFleet } from "./fleet-render.js";
+import { costForward, renderFleet } from "./fleet-render.js";
 import { type CrossSessionIndex, modelClass } from "./index-store.js";
 import { type ParsedPayload, type RateWindow } from "./payload.js";
 
@@ -173,11 +173,9 @@ export function renderLine(
     if (spend !== "") rows.push(labelled("spend", spend, color));
     if (fleet !== "") rows.push(labelled("fleet", fleet, color));
   } else if (payload.costUsd !== undefined) {
-    const ses = `${paint("ses", "dim", color)} ${paint(
-      `$${payload.costUsd.toFixed(2)}`,
-      "brightWhite",
-      color,
-    )}`;
+    // No store this render: the payload cost is the live session's authority
+    // (ADR-0004), cost-only (no token totals available without the index).
+    const ses = costForward("ses", payload.costUsd, color);
     rows.push(labelled("spend", ses, color));
   }
 

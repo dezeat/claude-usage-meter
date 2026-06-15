@@ -1,6 +1,6 @@
 import {} from "./pricing.js";
 import {} from "./aggregate.js";
-import { cacheReadShare, sumUsage, tokenBreakdown } from "./format.js";
+import { cacheReadShare, formatUsd, sumUsage, tokenBreakdown, } from "./format.js";
 function box(lines) {
     const width = Math.max(...lines.map((line) => line.length));
     const horizontal = "─".repeat(width + 2);
@@ -12,9 +12,7 @@ export function renderSummary(usage, costs, table) {
     for (const entry of costs.perModel) {
         const modelUsage = usage.models[entry.model];
         const tokens = modelUsage ? tokenBreakdown(modelUsage) : "";
-        const amount = entry.known
-            ? `$${entry.costUsd.toFixed(2)}`
-            : "no pricing ⚠";
+        const amount = entry.known ? formatUsd(entry.costUsd) : "no pricing ⚠";
         lines.push(`${entry.model}  ${amount}`);
         lines.push(`  ${tokens}`);
     }
@@ -24,7 +22,7 @@ export function renderSummary(usage, costs, table) {
     const total = sumUsage(usage.models);
     const share = cacheReadShare(total);
     lines.push("");
-    lines.push(`total  $${costs.totalUsd.toFixed(2)}`);
+    lines.push(`total  ${formatUsd(costs.totalUsd)}`);
     lines.push(`  ${tokenBreakdown(total)}` +
         (share === undefined ? "" : `  (${share}% cache reads)`));
     if (costs.hasUnknownModels) {
