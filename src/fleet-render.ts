@@ -1,5 +1,5 @@
 import { paint } from "./ansi.js";
-import { humanTokens } from "./format.js";
+import { formatUsd, humanTokens } from "./format.js";
 import {
   type ClassCount,
   type CrossSessionIndex,
@@ -132,30 +132,34 @@ export function renderMonthly(
     active: costForward(
       SELF_LABEL,
       active.costUsd,
-      humanTokens(active.tokens),
       color,
+      humanTokens(active.tokens),
     ),
     total: costForward(
       "Σ",
       spend.total.costUsd,
-      humanTokens(spend.total.tokens),
       color,
+      humanTokens(spend.total.tokens),
     ),
   };
 }
 
-// One cost-forward spend cell: dim label · bright `$cost` · dim tokens.
-function costForward(
+// One cost-forward spend cell: dim label · bright `$cost`, then dim tokens when
+// known. Omitting `tokens` yields the cost-only cell — the live, not-yet-indexed
+// `ses` fallback never prints a 0-token count, so there is no trailing tokens
+// segment (and no trailing space).
+export function costForward(
   label: string,
   costUsd: number,
-  tokens: string,
   color: boolean,
+  tokens?: string,
 ): string {
-  return `${paint(label, "dim", color)} ${paint(
-    `$${costUsd.toFixed(2)}`,
+  const cell = `${paint(label, "dim", color)} ${paint(
+    formatUsd(costUsd),
     "brightWhite",
     color,
-  )} ${paint(tokens, "dim", color)}`;
+  )}`;
+  return tokens === undefined ? cell : `${cell} ${paint(tokens, "dim", color)}`;
 }
 
 interface SessionRef {
@@ -177,20 +181,21 @@ function renderSpend(
   // Cost-forward: dim `ses` · bright `$cost` · dim tokens. Absence in the store
   // (not yet indexed this render) means cost-only; never print 0 tokens. With
   // neither tokens nor a session cost the whole cell is omitted.
+  //
+  // The two-cost-source rule (ADR-0004): when the session is in the store its
+  // pricing-table cost is authoritative (the branch below); only the not-yet-
+  // indexed live session falls back to the payload's `cost.total_cost_usd`.
   if (totals !== undefined) {
     return costForward(
       "ses",
       totals.costUsd,
-      humanTokens(sumTokens(totals.tokens)),
       color,
+      humanTokens(sumTokens(totals.tokens)),
     );
   }
+  // Live fallback: payload cost (ADR-0004), cost-only — omit tokens.
   if (sessionCostUsd !== undefined) {
-    return `${paint("ses", "dim", color)} ${paint(
-      `$${sessionCostUsd.toFixed(2)}`,
-      "brightWhite",
-      color,
-    )}`;
+    return costForward("ses", sessionCostUsd, color);
   }
   return "";
 }
