@@ -32,6 +32,9 @@ export function parsePayload(value) {
         modelId: model ? asString(model.id) : undefined,
         modelName: model ? asString(model.display_name) : undefined,
         contextPercentage: context ? asNumber(context.used_percentage) : undefined,
+        // Payload cost source (ADR-0004): authoritative ONLY for the live, not-yet-
+        // indexed session — the `ses` fallback in render/fleet-render. Everything
+        // persisted is priced from tokens in index-store, not this field.
         costUsd: cost ? asNumber(cost.total_cost_usd) : undefined,
         fiveHour: limits ? parseWindow(limits.five_hour) : undefined,
         sevenDay: limits ? parseWindow(limits.seven_day) : undefined,
