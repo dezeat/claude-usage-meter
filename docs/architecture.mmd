@@ -1,0 +1,96 @@
+---
+config:
+  look: handDrawn
+  theme: neutral
+---
+flowchart TB
+  %% C4 model of claude-usage-meter — derived from the actual src/ import graph.
+  %% Three nested levels: Context (who/what), Container (process surfaces),
+  %% Component (the pure-core / I-O-edge split + anti-corruption boundary).
+
+  %% ── Level 1 · System Context ─────────────────────────────────────────────
+  CC([Claude Code<br/>host CLI])
+  OP([Operator<br/>off-session])
+  TR[("~/.claude/projects/**.jsonl<br/>session transcripts · Claude Code writes")]
+  IDX[("~/.claude/usage-meter/index.db<br/>node:sqlite · 1 row per session")]
+
+  subgraph SYS["claude-usage-meter — a Claude Code plugin · no network · zero runtime deps"]
+    direction TB
+
+    %% ── Level 2 · Containers (process entry points) ───────────────────────
+    subgraph EDGES["I/O edges — own stdin · filesystem · node:sqlite"]
+      direction TB
+      SL["statusline.ts<br/>live 3-row statusline"]
+      SH["summary-hook.ts<br/>Stop-hook after-task summary"]
+      IH["index-hook.ts<br/>Stop-hook event write"]
+      RC["report-cli.ts<br/>off-session report"]
+      IS["index-store.ts<br/>read transcripts · fold · write store"]
+      DB["db.ts<br/>node:sqlite boundary · atomic upsert · WAL"]
+      LOC["location.ts<br/>cwd → repo · branch · worktree"]
+      STDIN["stdin.ts"]
+    end
+
+    %% ── Level 3 · Components (pure core) ──────────────────────────────────
+    subgraph CORE["Pure core — values in → strings/numbers out · no clock · no fs · no process"]
+      direction TB
+      PAY["payload.ts ⟂ ACL"]
+      AGG["aggregate.ts ⟂ ACL"]
+      REN["render.ts"]
+      FR["fleet-render.ts"]
+      REP["report.ts"]
+      SUM["summary.ts"]
+      PRI["pricing.ts"]
+      BARS["bars.ts"]
+      FMT["format.ts"]
+      ANSI["ansi.ts"]
+    end
+  end
+
+  %% ── Flow 1 · live statusline (refreshInterval) ───────────────────────────
+  CC -- "payload (stdin JSON)" --> SL
+  SL --> STDIN
+  SL -- "narrow unknown → ParsedPayload" --> PAY
+  SL -- "cwd → location" --> LOC
+  SL -- "updateIndex" --> IS
+  SL --> REN
+  REN --> FR
+  REN --> BARS
+  REN ==> OUT1["3-row statusline (stdout)"]
+
+  %% ── Flow 2 · after-task summary + event write (Stop hook) ────────────────
+  CC -- "writes" --> TR
+  CC -- "Stop hook" --> SH
+  CC -- "Stop hook" --> IH
+  SH -- "reads just-finished transcript" --> TR
+  SH --> AGG
+  AGG --> SUM
+  SUM ==> OUT2["after-task summary (stdout)"]
+  IH --> IS
+
+  %% ── Flow 3 · off-session report ──────────────────────────────────────────
+  OP -- "runs report" --> RC
+  RC --> IS
+  RC --> REP
+  REP ==> OUT3["report dashboard (stdout)"]
+
+  %% ── Shared persistence + pricing ─────────────────────────────────────────
+  IS -- "read incrementally" --> TR
+  IS -- "fold lines → ModelUsage" --> AGG
+  IS <--> DB
+  DB <--> IDX
+  IS -- "CrossSessionIndex" --> REN
+  IS -- "CrossSessionIndex" --> REP
+  PRI -. "priced by" .-> IS
+  PRI -. "priced by" .-> SUM
+  PRI -. "priced by" .-> RC
+  REN --> ANSI
+  REP --> FMT
+
+  classDef edge fill:#0d3b66,stroke:#7aa7d8,color:#fff;
+  classDef core fill:#1b4332,stroke:#74c69d,color:#fff;
+  classDef acl fill:#5a3e1b,stroke:#e0a458,color:#fff,stroke-width:2px;
+  classDef store fill:#3a3a3a,stroke:#aaa,color:#fff;
+  class SL,SH,IH,RC,IS,DB,LOC,STDIN edge;
+  class REN,FR,REP,SUM,PRI,BARS,FMT,ANSI core;
+  class PAY,AGG acl;
+  class TR,IDX store;
