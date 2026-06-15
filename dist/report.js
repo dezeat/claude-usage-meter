@@ -1,5 +1,5 @@
 import { paint } from "./ansi.js";
-import { cacheReadShare, humanTokens, sumUsage, tokenBreakdown, } from "./format.js";
+import { cacheReadShare, formatUsd, humanTokens, sumUsage, tokenBreakdown, } from "./format.js";
 import { monthTotals, sumTokens, } from "./index-store.js";
 const SPARKLINE_RAMP = "▁▂▃▄▅▆▇█";
 const SPARKLINE_WIDTH = 8;
@@ -97,7 +97,7 @@ function formatDaySection(dayRows, color) {
         const barCell = `${barChar} `;
         const tokStr = humanTokens(sumTokens(row.tokens));
         const tokCol = `${tokStr} tok`.padStart(tokCw);
-        const costStr = `$${row.costUsd.toFixed(2)}`.padStart(costCw);
+        const costStr = formatUsd(row.costUsd).padStart(costCw);
         lines.push(paint(dateCol, "dim", color) +
             paint(barCell, "dim", color) +
             paint(tokCol, "dim", color) +
@@ -121,7 +121,7 @@ function formatModelClassSection(classCounts, color) {
         const clsCol = row.cls.padEnd(clsCw);
         const tokStr = humanTokens(row.tokenCount);
         const tokCol = `${tokStr} tok`.padStart(tokCw);
-        const costStr = `$${row.costUsd.toFixed(2)}`.padStart(costCw);
+        const costStr = formatUsd(row.costUsd).padStart(costCw);
         lines.push(paint(clsCol, "dim", color) +
             paint(tokCol, "dim", color) +
             paint("  ", "dim", color) +
@@ -145,7 +145,7 @@ function formatBranchSection(byBranch, color) {
         const branchCol = branch.padEnd(branchCw);
         const tokStr = humanTokens(sumTokens(totals.tokens));
         const tokCol = `${tokStr} tok`.padStart(tokCw);
-        const costStr = `$${totals.costUsd.toFixed(2)}`.padStart(costCw);
+        const costStr = formatUsd(totals.costUsd).padStart(costCw);
         lines.push(paint(branchCol, "dim", color) +
             paint(tokCol, "dim", color) +
             paint("  ", "dim", color) +
@@ -162,7 +162,7 @@ export function formatReport(index, now, color) {
     const rule = "═".repeat(header.length);
     const billingLine = `Billing period (${month}):` +
         `   ${humanTokens(sumTokens(billing.tokens))} tok` +
-        `   $${billing.costUsd.toFixed(2)}`;
+        `   ${formatUsd(billing.costUsd)}`;
     // The four-way split under the headline total: it makes a low dollar figure
     // legible — agentic usage is cache-read-dominated, and cache reads are ~50×
     // cheaper than output, so the cost sits far below token-count × output-rate.

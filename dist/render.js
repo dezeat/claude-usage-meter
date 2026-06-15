@@ -1,6 +1,6 @@
 import { paint, padVisible } from "./ansi.js";
 import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, contextBar, elapsedFraction, formatCountdown, formatResetDate, paceBar, } from "./bars.js";
-import { renderFleet } from "./fleet-render.js";
+import { costForward, renderFleet } from "./fleet-render.js";
 import { modelClass } from "./index-store.js";
 import {} from "./payload.js";
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
@@ -100,7 +100,9 @@ export function renderLine(payload, now, options = {}) {
             rows.push(labelled("fleet", fleet, color));
     }
     else if (payload.costUsd !== undefined) {
-        const ses = `${paint("ses", "dim", color)} ${paint(`$${payload.costUsd.toFixed(2)}`, "brightWhite", color)}`;
+        // No store this render: the payload cost is the live session's authority
+        // (ADR-0004), cost-only (no token totals available without the index).
+        const ses = costForward("ses", payload.costUsd, color);
         rows.push(labelled("spend", ses, color));
     }
     if (rows.length === 0) {

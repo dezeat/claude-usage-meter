@@ -6,6 +6,12 @@ export function humanTokens(count) {
         return `${(count / 1_000).toFixed(1)}k`;
     return `${count}`;
 }
+// One place for the `$d.dd` cost spelling shared by every dollar figure
+// (statusline, summary, report). Two-decimal fixed, no thousands separator —
+// the format the tests pin and ccusage reconciles against.
+export function formatUsd(n) {
+    return `$${n.toFixed(2)}`;
+}
 // Sum a per-model token map into one ModelUsage. Pure reducer shared by the
 // report and summary breakdowns so every breakdown sums the four token kinds
 // the same way — the same accounting ccusage reconciles against.

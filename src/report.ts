@@ -1,6 +1,7 @@
 import { paint } from "./ansi.js";
 import {
   cacheReadShare,
+  formatUsd,
   humanTokens,
   sumUsage,
   tokenBreakdown,
@@ -122,7 +123,7 @@ function formatDaySection(dayRows: DayRow[], color: boolean): string {
     const barCell = `${barChar} `;
     const tokStr = humanTokens(sumTokens(row.tokens));
     const tokCol = `${tokStr} tok`.padStart(tokCw);
-    const costStr = `$${row.costUsd.toFixed(2)}`.padStart(costCw);
+    const costStr = formatUsd(row.costUsd).padStart(costCw);
     lines.push(
       paint(dateCol, "dim", color) +
         paint(barCell, "dim", color) +
@@ -155,7 +156,7 @@ function formatModelClassSection(
     const clsCol = row.cls.padEnd(clsCw);
     const tokStr = humanTokens(row.tokenCount);
     const tokCol = `${tokStr} tok`.padStart(tokCw);
-    const costStr = `$${row.costUsd.toFixed(2)}`.padStart(costCw);
+    const costStr = formatUsd(row.costUsd).padStart(costCw);
     lines.push(
       paint(clsCol, "dim", color) +
         paint(tokCol, "dim", color) +
@@ -191,7 +192,7 @@ function formatBranchSection(
     const branchCol = branch.padEnd(branchCw);
     const tokStr = humanTokens(sumTokens(totals.tokens));
     const tokCol = `${tokStr} tok`.padStart(tokCw);
-    const costStr = `$${totals.costUsd.toFixed(2)}`.padStart(costCw);
+    const costStr = formatUsd(totals.costUsd).padStart(costCw);
     lines.push(
       paint(branchCol, "dim", color) +
         paint(tokCol, "dim", color) +
@@ -218,7 +219,7 @@ export function formatReport(
   const billingLine =
     `Billing period (${month}):` +
     `   ${humanTokens(sumTokens(billing.tokens))} tok` +
-    `   $${billing.costUsd.toFixed(2)}`;
+    `   ${formatUsd(billing.costUsd)}`;
 
   // The four-way split under the headline total: it makes a low dollar figure
   // legible — agentic usage is cache-read-dominated, and cache reads are ~50×
