@@ -227,7 +227,16 @@ test("a second incremental update reads only the grown file and advances offset 
   });
   writeFileSync(copiedPath, readFileSync(copiedPath, "utf8") + extra + "\n");
 
-  const index3 = await updateIndex(indexPath, claudeProjects, DEFAULT_PRICING);
+  // growing.jsonl is this session's own (active) transcript, folded every tick even
+  // though the in-place append leaves the project-dir mtime unchanged and the
+  // cross-project sweep is debounced (Discussion #63, H1).
+  const index3 = await updateIndex(
+    indexPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    copiedPath,
+  );
   const sessions3 = Object.values(index3.sessions);
   const rec3 = sessions3.find((s) => s.sessionId === "growing");
   assert.ok(rec3);
@@ -298,8 +307,16 @@ test("a read ending mid-line neither drops nor double-counts the partial line on
   // Complete the partial line by appending a newline
   writeFileSync(transcriptFile, completeLine + partialAssistant + "\n", "utf8");
 
-  // Second update: now the previously partial line is complete and counted exactly once
-  const index2 = await updateIndex(indexPath, claudeProjects, DEFAULT_PRICING);
+  // Second update: now the previously partial line is complete and counted exactly
+  // once. boundary.jsonl is the active session, folded every tick despite the
+  // in-place completion not bumping the project-dir mtime (Discussion #63, H1).
+  const index2 = await updateIndex(
+    indexPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    transcriptFile,
+  );
   const rec2 = Object.values(index2.sessions).find(
     (s) => s.sessionId === "boundary",
   );
@@ -608,7 +625,7 @@ test("an updateIndex tick where no transcript grew performs zero upserts yet sti
   assert.strictEqual(rec.tokens["claude-sonnet-4-6"]?.outputTokens, 50);
 });
 
-test("an updateIndex tick where one of two transcripts grew upserts only the advanced session", async () => {
+test("an updateIndex tick where the active session grew folds only it, not the unchanged sibling", async () => {
   const tmp = makeTmpDir();
   const stable = writeJsonl(tmp, "stable.jsonl", [
     assistantLine({
@@ -655,12 +672,21 @@ test("an updateIndex tick where one of two transcripts grew upserts only the adv
   writeFileSync(grownCopy, readFileSync(grownCopy, "utf8") + extra + "\n");
 
   resetUpsertCountForTest();
-  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+  // growing.jsonl is the active session: it is folded directly, so its in-place
+  // growth lands even though the cross-project sweep is debounced; the stable
+  // session is never touched (Discussion #63, H1).
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    grownCopy,
+  );
 
   assert.strictEqual(
     upsertCountForTest(),
     1,
-    "only the one advanced session is upserted, not the unchanged one",
+    "only the active advanced session is upserted, not the unchanged one",
   );
 
   const grew = Object.values(index.sessions).find(
@@ -670,7 +696,116 @@ test("an updateIndex tick where one of two transcripts grew upserts only the adv
   assert.strictEqual(
     grew.tokens["claude-opus-4-8"]?.inputTokens,
     500,
-    "the advanced session's cumulative tokens are updated",
+    "the active session's cumulative tokens are updated",
+  );
+});
+
+// ---------------------------------------------------------------------------
+// H1 sweep debounce: the cross-project sweep is gated behind a structural-change
+// signal (max project-dir mtime), so a quiet tick skips it. A non-active session
+// growing in place is invisible to that signal (an in-place append does not bump
+// the directory mtime — verified on btrfs), so it is deliberately deferred until a
+// structural change sweeps, or its own Stop hook writes it (ADR-0003). The active
+// session is folded regardless, so it is never frozen by the debounce.
+// ---------------------------------------------------------------------------
+
+test("a non-active session's in-place growth is debounced on a quiet tick, then folded when a new transcript triggers a sweep", async () => {
+  const tmp = makeTmpDir();
+  const active = writeJsonl(tmp, "active.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "rA",
+      msgId: "mA",
+      model: "claude-sonnet-4-6",
+      input: 100,
+      output: 50,
+    }),
+  ]);
+  const other = writeJsonl(tmp, "other.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "rO1",
+      msgId: "mO1",
+      model: "claude-opus-4-8",
+      input: 200,
+      output: 60,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [active, other]);
+  const dbPath = join(tmp, "index.db");
+  const projDir = join(claudeProjects, "-fake-midnight-marble");
+  const activeCopy = join(projDir, "active.jsonl");
+  const otherCopy = join(projDir, "other.jsonl");
+
+  // First tick: no watermark yet, so the full sweep folds both sessions.
+  await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    activeCopy,
+  );
+
+  // The other session grows in place — no new directory entry, so the project-dir
+  // mtime does not move and the watermark sees no structural change.
+  const extra = assistantLine({
+    ts: "2026-06-13T10:10:00.000Z",
+    branch: "main",
+    reqId: "rO2",
+    msgId: "mO2",
+    model: "claude-opus-4-8",
+    input: 300,
+    output: 90,
+  });
+  writeFileSync(otherCopy, readFileSync(otherCopy, "utf8") + extra + "\n");
+
+  // A quiet tick (the active session itself did not grow): the sweep is debounced,
+  // so the other session's in-place growth is deliberately not folded yet.
+  const quiet = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    activeCopy,
+  );
+  const otherQuiet = Object.values(quiet.sessions).find(
+    (s) => s.sessionId === "other",
+  );
+  assert.strictEqual(
+    otherQuiet?.tokens["claude-opus-4-8"]?.inputTokens,
+    200,
+    "the sweep was skipped, so the non-active growth is not folded on a quiet tick",
+  );
+
+  // A brand-new transcript file is a structural change: it bumps the project-dir
+  // mtime, so the next tick sweeps and the previously-deferred growth is folded.
+  writeJsonl(projDir, "fresh.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:20:00.000Z",
+      branch: "main",
+      reqId: "rF",
+      msgId: "mF",
+      model: "claude-haiku-4-5",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const swept = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    activeCopy,
+  );
+  const otherSwept = Object.values(swept.sessions).find(
+    (s) => s.sessionId === "other",
+  );
+  assert.strictEqual(
+    otherSwept?.tokens["claude-opus-4-8"]?.inputTokens,
+    500,
+    "a structural change triggers a sweep that folds the deferred growth",
   );
 });
 

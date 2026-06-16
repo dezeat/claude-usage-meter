@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {} from "./aggregate.js";
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 function isLockedError(err) {
     return err instanceof Error && err.message.toLowerCase().includes("locked");
 }
@@ -57,6 +57,18 @@ function migrateToV3(db) {
   `);
     createReadIndexes(db);
 }
+// v3 -> v4: a generic key/value table for cross-tick scalars the store needs to
+// remember between statusline processes (each render is a fresh process). The
+// hot-path sweep debounce (Discussion #63, H1) persists its project-dir mtime
+// watermark here. IF NOT EXISTS keeps the concurrent-worktree open a no-op.
+function migrateToV4(db) {
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+}
 // The composite (month, model_class) covers both month-scoped aggregates
 // (countSessionsByClassForMonth, monthClassSpendRows); last_ts covers the live
 // query. parent_session_id is in the month index's leading filter via month, but
@@ -87,6 +99,10 @@ function migrateSchema(db) {
     if (version < 3) {
         migrateToV3(db);
         db.exec("PRAGMA user_version = 3");
+    }
+    if (version < 4) {
+        migrateToV4(db);
+        db.exec("PRAGMA user_version = 4");
     }
 }
 // The DB is the cross-session store, one row per Claude Code session keyed by
@@ -292,4 +308,16 @@ export function getAccountLimit(db, kind) {
         .prepare("SELECT * FROM account_limits WHERE window_kind = ?")
         .get(kind);
     return raw === undefined ? undefined : toAccountLimitRow(raw);
+}
+// One scalar the store carries across statusline processes (the meta kv table).
+// Values are stored as opaque TEXT; the caller owns the encoding (e.g. the H1
+// sweep watermark stamps a stringified nanosecond mtime). Undefined when the key
+// was never written.
+export function getMeta(db, key) {
+    const raw = db.prepare("SELECT value FROM meta WHERE key = ?").get(key);
+    return raw?.value;
+}
+export function setMeta(db, key, value) {
+    db.prepare(`INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
 }

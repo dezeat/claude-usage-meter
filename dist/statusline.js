@@ -25,7 +25,10 @@ async function main() {
         fiveHour: parsed.fiveHour,
         sevenDay: parsed.sevenDay,
         observedAt: Date.now(),
-    }).catch(() => null);
+    }, 
+    // The session this statusline belongs to: folded every tick even when the
+    // cross-project sweep is debounced, so its own usage never freezes (#63, H1).
+    parsed.transcriptPath).catch(() => null);
     const line = renderLine(parsed, new Date(), {
         color: colorEnabled(),
         index,
