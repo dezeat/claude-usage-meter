@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 
 import { type ModelUsage } from "./aggregate.js";
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // The two account-wide rate-limit windows persisted in account_limits. The
 // context window is deliberately NOT here: it is legitimately per-session, so it
@@ -97,6 +97,19 @@ function migrateToV3(db: DatabaseSync): void {
   createReadIndexes(db);
 }
 
+// v3 -> v4: a generic key/value table for cross-tick scalars the store needs to
+// remember between statusline processes (each render is a fresh process). The
+// hot-path sweep debounce (Discussion #63, H1) persists its project-dir mtime
+// watermark here. IF NOT EXISTS keeps the concurrent-worktree open a no-op.
+function migrateToV4(db: DatabaseSync): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT
+    )
+  `);
+}
+
 // The composite (month, model_class) covers both month-scoped aggregates
 // (countSessionsByClassForMonth, monthClassSpendRows); last_ts covers the live
 // query. parent_session_id is in the month index's leading filter via month, but
@@ -132,6 +145,11 @@ function migrateSchema(db: DatabaseSync): void {
   if (version < 3) {
     migrateToV3(db);
     db.exec("PRAGMA user_version = 3");
+  }
+
+  if (version < 4) {
+    migrateToV4(db);
+    db.exec("PRAGMA user_version = 4");
   }
 }
 
@@ -433,4 +451,22 @@ export function getAccountLimit(
     .prepare("SELECT * FROM account_limits WHERE window_kind = ?")
     .get(kind) as unknown as RawAccountLimitRow | undefined;
   return raw === undefined ? undefined : toAccountLimitRow(raw);
+}
+
+// One scalar the store carries across statusline processes (the meta kv table).
+// Values are stored as opaque TEXT; the caller owns the encoding (e.g. the H1
+// sweep watermark stamps a stringified nanosecond mtime). Undefined when the key
+// was never written.
+export function getMeta(db: DatabaseSync, key: string): string | undefined {
+  const raw = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+    | { value: string }
+    | undefined;
+  return raw?.value;
+}
+
+export function setMeta(db: DatabaseSync, key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO meta (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
 }
