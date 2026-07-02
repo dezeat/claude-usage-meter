@@ -42,8 +42,8 @@ project session.
 **limits** — account-wide, no model (it leads `current` above):
 
 - **Context + 5-hour + 7-day** usage bars (`▓` filled, `░` empty) with reset
-  countdowns after `⟳`; the **7-day** reset also spells out its absolute day
-  (`⟳ 4d21h (Tu 16.06)`).
+  countdowns after `⟳`, shown as the largest unit only (`2h`, `4d`); the
+  **7-day** reset also spells out its absolute day (`⟳ 4d (Tu 16.06)`).
 - Bars colour by flat fill %. The bright `│` is the **even-pace tick** on the
   5h/7d bars (where usage _should_ be for an even burn); it never drives colour.
 
