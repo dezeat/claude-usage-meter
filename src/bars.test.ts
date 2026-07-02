@@ -85,11 +85,16 @@ test("context bar colours by absolute fill under the flat rule", () => {
   assert.ok(contextBar(85, true).includes(ANSI.red));
 });
 
-test("countdown formats minutes, hours and days distinctly", () => {
+test("countdown shows only its largest unit — 2d not 2d3h, 3h not 3h05m", () => {
   assert.equal(formatCountdown(0), "now");
+  assert.equal(formatCountdown(0.4), "now");
+  assert.equal(formatCountdown(42), "42s");
   assert.equal(formatCountdown(47 * 60), "47m");
-  assert.equal(formatCountdown(2 * 3600), "2h00m");
-  assert.equal(formatCountdown(2 * 86400 + 3 * 3600), "2d3h");
+  assert.equal(formatCountdown(59 * 60 + 59), "59m");
+  assert.equal(formatCountdown(3 * 3600 + 5 * 60), "3h");
+  assert.equal(formatCountdown(2 * 3600), "2h");
+  assert.equal(formatCountdown(2 * 86400 + 3 * 3600), "2d");
+  assert.equal(formatCountdown(2 * 86400), "2d");
 });
 
 test("the reset date is the weekday and zero-padded DD.MM of the reset day", () => {
