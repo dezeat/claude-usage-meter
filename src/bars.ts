@@ -70,18 +70,23 @@ export function contextBar(usedPercentage: number, color: boolean): string {
   return out;
 }
 
+// A unit appears only when at least one of it remains — a zero component is
+// dropped ("2d", "2h"), never rendered ("2d0h", "2h00m").
 export function formatCountdown(secondsUntil: number): string {
-  if (secondsUntil <= 0) return "now";
-  const totalMinutes = Math.floor(secondsUntil / 60);
+  if (secondsUntil < 1) return "now";
+  const totalSeconds = Math.floor(secondsUntil);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
   if (totalMinutes < 60) return `${totalMinutes}m`;
   const totalHours = Math.floor(totalMinutes / 60);
   if (totalHours < 24) {
     const minutes = totalMinutes % 60;
+    if (minutes === 0) return `${totalHours}h`;
     return `${totalHours}h${String(minutes).padStart(2, "0")}m`;
   }
   const days = Math.floor(totalHours / 24);
   const hours = totalHours % 24;
-  return `${days}d${hours}h`;
+  return hours === 0 ? `${days}d` : `${days}d${hours}h`;
 }
 
 const WEEKDAYS = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"] as const;
