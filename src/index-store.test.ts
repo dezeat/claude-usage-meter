@@ -916,9 +916,19 @@ test("monthClassSpend slices a month's tokens+cost per class with Σ summed over
 
   const spend = monthClassSpend(dbPath, "2026-06");
 
-  assert.strictEqual(spend.byClass["opus"]?.tokens, 1_000_000);
+  assert.deepStrictEqual(spend.byClass["opus"]?.tokens, {
+    inputTokens: 1_000_000,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  });
   assert.strictEqual(spend.byClass["opus"]?.costUsd, 5);
-  assert.strictEqual(spend.byClass["sonnet"]?.tokens, 2_000_000);
+  assert.deepStrictEqual(spend.byClass["sonnet"]?.tokens, {
+    inputTokens: 2_000_000,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  });
   assert.strictEqual(spend.byClass["sonnet"]?.costUsd, 6);
   assert.strictEqual(
     spend.byClass["haiku"],
@@ -926,9 +936,14 @@ test("monthClassSpend slices a month's tokens+cost per class with Σ summed over
     "a class absent from the month has no slice",
   );
 
-  assert.strictEqual(
+  assert.deepStrictEqual(
     spend.total.tokens,
-    3_000_000,
+    {
+      inputTokens: 3_000_000,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+    },
     "Σ tokens over all classes",
   );
   assert.strictEqual(spend.total.costUsd, 11, "Σ cost over all classes");
