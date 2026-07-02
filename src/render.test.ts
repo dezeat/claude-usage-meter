@@ -198,7 +198,7 @@ test("an absent resolved window falls back to the payload's own snapshot", () =>
 
 test("the spend row is cost-forward with the mdl self-label and Σ labels", () => {
   const spend = fullRender(false).split("\n")[2] ?? "";
-  assert.match(spend, /ses \$3\.45 1\.2M/);
+  assert.match(spend, /ses \$3\.45 i:1\.0M\|c:0\|o:200\.0k/);
   assert.match(spend, /mdl \$/);
   assert.match(spend, /Σ \$/);
 });

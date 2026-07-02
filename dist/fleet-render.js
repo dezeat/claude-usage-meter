@@ -1,6 +1,6 @@
 import { paint } from "./ansi.js";
-import { formatUsd, humanTokens } from "./format.js";
-import { monthClassSpend, monthOf, sessionTotals, sumTokens, } from "./index-store.js";
+import { formatUsd, sumUsage, tokenTrail } from "./format.js";
+import { monthClassSpend, monthOf, sessionTotals, } from "./index-store.js";
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
 // The active model's own class is named on the `now` row ("opus 4.8"), so the
 // rows below it would only repeat that identity. They use this neutral self-tag
@@ -74,7 +74,7 @@ export function renderRoster(index, currentClass, month, nowMs, color, excludeSe
 }
 // The active class's accumulated spend this month and the month Σ total, as two
 // cost-forward spend-row cells (`<label> $<cost> <tokens>`): the dim label, the
-// bright cost, the dim token count. The active cell is labelled with the neutral
+// bright cost, the dim i|c|o trail (ADR-0005). The active cell is labelled with the neutral
 // self-tag (`mdl`); Σ counts every class including ones not shown individually. A
 // zero for the active class is meaningful (nothing spent on it yet this month),
 // so it renders `mdl $0.00 0` rather than being omitted.
@@ -82,10 +82,13 @@ export function renderMonthly(indexPath, activeClass, month, color) {
     const spend = monthClassSpend(indexPath, month);
     // Look up by the real class; render under the neutral self-tag (the current
     // row already names the model). A Σ over every class follows.
-    const active = spend.byClass[activeClass] ?? { tokens: 0, costUsd: 0 };
+    const active = spend.byClass[activeClass] ?? {
+        tokens: sumUsage({}),
+        costUsd: 0,
+    };
     return {
-        active: costForward(SELF_LABEL, active.costUsd, color, humanTokens(active.tokens)),
-        total: costForward("Σ", spend.total.costUsd, color, humanTokens(spend.total.tokens)),
+        active: costForward(SELF_LABEL, active.costUsd, color, tokenTrail(active.tokens)),
+        total: costForward("Σ", spend.total.costUsd, color, tokenTrail(spend.total.tokens)),
     };
 }
 // One cost-forward spend cell: dim label · bright `$cost`, then dim tokens when
@@ -106,7 +109,7 @@ function renderSpend(index, sessionCostUsd, session, color) {
     // pricing-table cost is authoritative (the branch below); only the not-yet-
     // indexed live session falls back to the payload's `cost.total_cost_usd`.
     if (totals !== undefined) {
-        return costForward("ses", totals.costUsd, color, humanTokens(sumTokens(totals.tokens)));
+        return costForward("ses", totals.costUsd, color, tokenTrail(sumUsage(totals.tokens)));
     }
     // Live fallback: payload cost (ADR-0004), cost-only — omit tokens.
     if (sessionCostUsd !== undefined) {

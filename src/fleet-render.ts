@@ -1,12 +1,11 @@
 import { paint } from "./ansi.js";
-import { formatUsd, humanTokens } from "./format.js";
+import { formatUsd, sumUsage, tokenTrail } from "./format.js";
 import {
   type ClassCount,
   type CrossSessionIndex,
   monthClassSpend,
   monthOf,
   sessionTotals,
-  sumTokens,
 } from "./index-store.js";
 
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
@@ -113,7 +112,7 @@ export interface MonthlySpend {
 
 // The active class's accumulated spend this month and the month Σ total, as two
 // cost-forward spend-row cells (`<label> $<cost> <tokens>`): the dim label, the
-// bright cost, the dim token count. The active cell is labelled with the neutral
+// bright cost, the dim i|c|o trail (ADR-0005). The active cell is labelled with the neutral
 // self-tag (`mdl`); Σ counts every class including ones not shown individually. A
 // zero for the active class is meaningful (nothing spent on it yet this month),
 // so it renders `mdl $0.00 0` rather than being omitted.
@@ -126,20 +125,23 @@ export function renderMonthly(
   const spend = monthClassSpend(indexPath, month);
   // Look up by the real class; render under the neutral self-tag (the current
   // row already names the model). A Σ over every class follows.
-  const active = spend.byClass[activeClass] ?? { tokens: 0, costUsd: 0 };
+  const active = spend.byClass[activeClass] ?? {
+    tokens: sumUsage({}),
+    costUsd: 0,
+  };
 
   return {
     active: costForward(
       SELF_LABEL,
       active.costUsd,
       color,
-      humanTokens(active.tokens),
+      tokenTrail(active.tokens),
     ),
     total: costForward(
       "Σ",
       spend.total.costUsd,
       color,
-      humanTokens(spend.total.tokens),
+      tokenTrail(spend.total.tokens),
     ),
   };
 }
@@ -190,7 +192,7 @@ function renderSpend(
       "ses",
       totals.costUsd,
       color,
-      humanTokens(sumTokens(totals.tokens)),
+      tokenTrail(sumUsage(totals.tokens)),
     );
   }
   // Live fallback: payload cost (ADR-0004), cost-only — omit tokens.

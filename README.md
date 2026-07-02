@@ -51,6 +51,9 @@ project session.
 
 - This **session** (live), then **this model** (`mdl`) this month.
 - **`Σ`** — the month total across every class.
+- Each cell's token trail splits as **`i:420.0k|c:11.9M|o:14.0k`** — fresh
+  **i**nput (cache writes included), **c**ached reads, **o**utput. `c` is the
+  ~free bucket that explains a low dollar figure; `i+c+o` is the cell's total.
 
 **fleet** — `mdl <count> Σ <total>` then `active` (e.g. `9 Σ 23`):
 
