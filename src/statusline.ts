@@ -25,11 +25,19 @@ async function main(): Promise<void> {
   // store learns the freshest account-wide windows (Discussion #63, Part 1). The
   // resolved freshest comes back on index.limits and renderLine prefers it over the
   // local payload, degrading to the payload when the store is empty/unavailable.
-  const index = await updateIndex(INDEX_PATH, CLAUDE_DIR, DEFAULT_PRICING, {
-    fiveHour: parsed.fiveHour,
-    sevenDay: parsed.sevenDay,
-    observedAt: Date.now(),
-  }).catch(() => null);
+  const index = await updateIndex(
+    INDEX_PATH,
+    CLAUDE_DIR,
+    DEFAULT_PRICING,
+    {
+      fiveHour: parsed.fiveHour,
+      sevenDay: parsed.sevenDay,
+      observedAt: Date.now(),
+    },
+    // The session this statusline belongs to: folded every tick even when the
+    // cross-project sweep is debounced, so its own usage never freezes (#63, H1).
+    parsed.transcriptPath,
+  ).catch(() => null);
   const line = renderLine(parsed, new Date(), {
     color: colorEnabled(),
     index,

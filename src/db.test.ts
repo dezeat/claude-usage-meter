@@ -15,6 +15,8 @@ import {
   upsertSession,
   upsertAccountLimit,
   getAccountLimit,
+  getMeta,
+  setMeta,
   countSessionsByClassForMonth,
   countLiveSessionsByClass,
   type SessionRow,
@@ -365,7 +367,8 @@ test("opening an existing v1 store walks the ladder to the current schema, addin
 
   const db = openDb(dbPath);
   // The ladder runs every step from the stored version up to the current schema,
-  // so a v1 store lands on SCHEMA_VERSION (now v3 with account_limits + indexes).
+  // so a v1 store lands on SCHEMA_VERSION (v2 parent_session_id, v3 account_limits
+  // + read indexes, v4 meta).
   assert.strictEqual(
     schemaVersion(db),
     SCHEMA_VERSION,
@@ -381,6 +384,7 @@ test("opening an existing v1 store walks the ladder to the current schema, addin
       .all() as Array<{ name: string }>
   ).map((r) => r.name);
   assert.ok(tables.includes("account_limits"), "the v3 table was added");
+  assert.ok(tables.includes("meta"), "the v4 meta table was added");
   const row = db
     .prepare(
       "SELECT session_id, parent_session_id FROM sessions WHERE session_id = ?",
@@ -506,7 +510,11 @@ test("opening an existing v2 store migrates it to v3 in place, adding account_li
   v2.close();
 
   const db = openDb(dbPath);
-  assert.strictEqual(schemaVersion(db), 3, "the store is migrated to v3");
+  assert.strictEqual(
+    schemaVersion(db),
+    SCHEMA_VERSION,
+    "the store walks the ladder to the current schema",
+  );
 
   const tables = (
     db
@@ -528,6 +536,70 @@ test("opening an existing v2 store migrates it to v3 in place, adding account_li
     .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
     .get("kept") as { session_id: string };
   assert.strictEqual(row.session_id, "kept", "the pre-existing row survived");
+  db.close();
+});
+
+test("opening an existing v3 store migrates it to v4 in place, adding the meta table and preserving rows", () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "v3.db");
+
+  // Hand-build a v3 store: sessions + account_limits + the read indexes, no meta,
+  // stamped user_version 3.
+  const v3 = new DatabaseSync(dbPath);
+  v3.exec("PRAGMA journal_mode = WAL");
+  v3.exec(
+    `CREATE TABLE sessions (
+       session_id TEXT PRIMARY KEY, path TEXT NOT NULL, branch TEXT,
+       model_class TEXT, cost_usd REAL, last_ts INTEGER,
+       byte_offset INTEGER NOT NULL, month TEXT, tokens_json TEXT,
+       parent_session_id TEXT, machine_id TEXT)`,
+  );
+  v3.exec(
+    `CREATE TABLE account_limits (
+       window_kind TEXT PRIMARY KEY, used_percentage REAL,
+       resets_at INTEGER, observed_at INTEGER NOT NULL)`,
+  );
+  v3.prepare(
+    "INSERT INTO sessions (session_id, path, byte_offset, model_class, month) VALUES (?, ?, ?, ?, ?)",
+  ).run("kept", "/fake/kept.jsonl", 5, "opus", "2026-06");
+  v3.exec("PRAGMA user_version = 3");
+  v3.close();
+
+  const db = openDb(dbPath);
+  assert.strictEqual(schemaVersion(db), SCHEMA_VERSION, "migrated to current");
+
+  const tables = (
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  assert.ok(tables.includes("meta"), "the v4 meta table was created");
+
+  const row = db
+    .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
+    .get("kept") as { session_id: string };
+  assert.strictEqual(row.session_id, "kept", "the pre-existing row survived");
+  db.close();
+});
+
+test("a fresh store carries the v4 meta table", () => {
+  const db = openDb(":memory:");
+  const tables = (
+    db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>
+  ).map((r) => r.name);
+  db.close();
+  assert.ok(tables.includes("meta"), "the meta table exists on a fresh store");
+});
+
+test("meta round-trips a value and the latest write wins on the same key", () => {
+  const db = openDb(":memory:");
+  assert.strictEqual(getMeta(db, "k"), undefined, "absent key reads undefined");
+  setMeta(db, "k", "first");
+  assert.strictEqual(getMeta(db, "k"), "first");
+  setMeta(db, "k", "second");
+  assert.strictEqual(getMeta(db, "k"), "second", "upsert overwrites in place");
   db.close();
 });
 
