@@ -166,8 +166,10 @@ the **absolute** path to your clone:
 - `refreshInterval` (seconds; default `10`, minimum `1`) re-runs the command on a
   fixed idle timer _in addition_ to Claude Code's events, so reset countdowns and
   live fleet counts keep ticking while you read. It runs locally over your own
-  transcripts, so **refreshing costs no API tokens**, and an idle tick where no
-  transcript has grown skips the index write entirely.
+  transcripts, so **refreshing costs no API tokens**. A quiet tick — nothing new
+  under `~/.claude/projects` — skips the cross-project sweep and the index write
+  entirely behind a directory-mtime watermark; the active session is still
+  re-read every tick, so its numbers never go stale.
 
 ### Manual hooks (clone-only, no marketplace)
 
