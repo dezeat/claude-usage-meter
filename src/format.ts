@@ -46,6 +46,18 @@ export function tokenBreakdown(usage: ModelUsage): string {
   );
 }
 
+// The spend-row token trail (ADR-0005): `i:<n>|c:<n>|o:<n>` — c is cache reads
+// ONLY; cache creation folds into i (fresh input work billed above the base
+// rate, not cached savings), so i+c+o equals the four-way total. An all-zero
+// usage keeps the single "0" cell (a meaningful zero) instead of i:0|c:0|o:0.
+export function tokenTrail(usage: ModelUsage): string {
+  const i = usage.inputTokens + usage.cacheCreationTokens;
+  const c = usage.cacheReadTokens;
+  const o = usage.outputTokens;
+  if (i + c + o === 0) return "0";
+  return `i:${humanTokens(i)}|c:${humanTokens(c)}|o:${humanTokens(o)}`;
+}
+
 // The cache-read share of all tokens, rounded to a whole percent — the single
 // cue that explains a surprisingly-low cost ("96% cache reads"). Returns
 // undefined when there are no tokens, so callers omit the cue rather than

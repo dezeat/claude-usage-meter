@@ -7,6 +7,7 @@ import {
   formatUsd,
   sumUsage,
   tokenBreakdown,
+  tokenTrail,
 } from "./format.js";
 
 // Synthetic fixture mirroring the cache-read-dominated agentic profile from the
@@ -69,4 +70,32 @@ test("summing a per-model token map adds each of the four kinds independently", 
     },
   };
   assert.deepStrictEqual(sumUsage(perModel), PROFILE);
+});
+
+test("the spend trail folds cache writes into i and keeps c as cache reads only (ADR-0005)", () => {
+  // PROFILE hand-computed: i = 12_000 input + 23_000 cacheCreate = 35_000;
+  // c = 960_000 cache reads; o = 5_000 output.
+  assert.strictEqual(tokenTrail(PROFILE), "i:35.0k|c:960.0k|o:5.0k");
+});
+
+test("the spend trail's three segments sum to the four-way total", () => {
+  // Small exact numbers so humanTokens is the identity: 3+1 | 4 | 2 = 10,
+  // the same total the four kinds sum to.
+  const usage: ModelUsage = {
+    inputTokens: 3,
+    outputTokens: 2,
+    cacheReadTokens: 4,
+    cacheCreationTokens: 1,
+  };
+  assert.strictEqual(tokenTrail(usage), "i:4|c:4|o:2");
+});
+
+test("an all-zero usage keeps the single 0 cell — never i:0|c:0|o:0 noise", () => {
+  const empty: ModelUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheCreationTokens: 0,
+  };
+  assert.strictEqual(tokenTrail(empty), "0");
 });

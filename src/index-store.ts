@@ -2,6 +2,7 @@ import { readFileSync, statSync, readdirSync, type Dirent } from "node:fs";
 import { join, basename, dirname } from "node:path";
 
 import { aggregateTranscript, type ModelUsage } from "./aggregate.js";
+import { sumUsage } from "./format.js";
 import { cost, type PricingTable } from "./pricing.js";
 import {
   openDb,
@@ -711,7 +712,7 @@ export function liveSessionCounts(
 }
 
 export interface ClassSpend {
-  tokens: number;
+  tokens: ModelUsage;
   costUsd: number;
 }
 
@@ -721,29 +722,33 @@ export interface MonthSpend {
 }
 
 // Per-model-class token+cost spend for one calendar month, plus the month grand
-// total summed from the same rows. The token total per class uses the shared
-// sumTokens summation, matching every other token figure. The Σ total counts
-// ALL classes for the month, including ones the statusline does not render
-// individually. byClass is keyed by class; an absent class means no sessions of
-// it this month (the renderer treats that as a meaningful zero, not a gap).
+// total summed from the same rows. Each slice keeps the four-way ModelUsage sum
+// (not a flattened count) so the renderer can split the trail per ADR-0005. The
+// Σ total counts ALL classes for the month, including ones the statusline does
+// not render individually. byClass is keyed by class; an absent class means no
+// sessions of it this month (the renderer treats that as a meaningful zero, not
+// a gap).
 export function monthClassSpend(indexPath: string, month: string): MonthSpend {
   let byClass: Record<string, ClassSpend> = {};
-  let total: ClassSpend = { tokens: 0, costUsd: 0 };
+  let total: ClassSpend = { tokens: emptyUsage(), costUsd: 0 };
   try {
     const db = openDb(indexPath);
     const rows = monthClassSpendRows(db, month);
     db.close();
     for (const row of rows) {
-      const tokens = sumTokens(row.tokens);
-      const slice = (byClass[row.modelClass] ??= { tokens: 0, costUsd: 0 });
-      slice.tokens += tokens;
+      const usage = sumUsage(row.tokens);
+      const slice = (byClass[row.modelClass] ??= {
+        tokens: emptyUsage(),
+        costUsd: 0,
+      });
+      addUsage(slice.tokens, usage);
       slice.costUsd += row.costUsd;
-      total.tokens += tokens;
+      addUsage(total.tokens, usage);
       total.costUsd += row.costUsd;
     }
   } catch {
     byClass = {};
-    total = { tokens: 0, costUsd: 0 };
+    total = { tokens: emptyUsage(), costUsd: 0 };
   }
   return { byClass, total };
 }

@@ -258,7 +258,7 @@ test("the spend cell is cost-forward: $cost before the session tokens", () => {
     false,
     { sessionId: "abc" },
   );
-  assert.strictEqual(spendCells[0], "ses $2.14 1.2M");
+  assert.strictEqual(spendCells[0], "ses $2.14 i:600.0k|c:100.0k|o:500.0k");
 });
 
 test("when the session is not in the store the spend cell falls back to cost only", () => {
@@ -511,22 +511,22 @@ const SPEND_SESSIONS = [
 test("the active class's monthly cell is cost-forward labelled by class; Σ sums all classes", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
   const { active, total } = renderMonthly(dbPath, "opus", SPEND_MONTH, false);
-  assert.strictEqual(active, "mdl $5.00 1.0M");
-  assert.strictEqual(total, "Σ $11.00 3.0M");
+  assert.strictEqual(active, "mdl $5.00 i:1.0M|c:0|o:0");
+  assert.strictEqual(total, "Σ $11.00 i:3.0M|c:0|o:0");
 });
 
 test("the Σ total reflects all classes even when the active class is the smaller one", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
   const { active, total } = renderMonthly(dbPath, "sonnet", SPEND_MONTH, false);
-  assert.strictEqual(active, "mdl $6.00 2.0M");
-  assert.strictEqual(total, "Σ $11.00 3.0M");
+  assert.strictEqual(active, "mdl $6.00 i:2.0M|c:0|o:0");
+  assert.strictEqual(total, "Σ $11.00 i:3.0M|c:0|o:0");
 });
 
 test("an active class with no sessions this month renders <class> $0.00 0 while Σ reflects others", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
   const { active, total } = renderMonthly(dbPath, "haiku", SPEND_MONTH, false);
   assert.strictEqual(active, "mdl $0.00 0");
-  assert.strictEqual(total, "Σ $11.00 3.0M");
+  assert.strictEqual(total, "Σ $11.00 i:3.0M|c:0|o:0");
 });
 
 test("the cost is bright while the label and tokens are dim on both monthly cells", async () => {
