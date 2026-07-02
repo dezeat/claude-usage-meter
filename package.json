@@ -1,6 +1,6 @@
 {
   "name": "claude-usage-meter",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Live Claude Code usage meter: a four-row statusline (current model+repo, limit pace bars, cost-forward spend, cross-session fleet) plus an after-task cost summary. No network, no telemetry, zero runtime dependencies.",
   "type": "module",
   "license": "MIT",
