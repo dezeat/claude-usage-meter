@@ -152,15 +152,15 @@ test("the limits row starts with ctx — the model is no longer pinned here", ()
   assert.match(limits, /^limits {3}ctx /);
   assert.ok(!/^limits {3}opus/.test(limits), "no model pin on the limits row");
   assert.match(limits, /ctx .* 24%/);
-  assert.match(limits, /5h .* 52% ⟳ 2h00m/);
-  assert.match(limits, /7d .* 68% ⟳ 2d3h \(\w{2} \d\d\.\d\d\)$/);
+  assert.match(limits, /5h .* 52% ⟳ 2h/);
+  assert.match(limits, /7d .* 68% ⟳ 2d \(\w{2} \d\d\.\d\d\)$/);
   // Only the 7d cell carries the absolute reset day — exactly one "(" in the row.
   assert.equal((limits.match(/\(/g) ?? []).length, 1, "only 7d shows a date");
 });
 
 test("resolved cross-session limits override the payload's own 5h/7d, while ctx stays from the payload", () => {
   const fiveResets = promax.rate_limits.five_hour.resets_at;
-  // Same reset instant (so the 2h00m countdown is unchanged), fresher usage from
+  // Same reset instant (so the 2h countdown is unchanged), fresher usage from
   // another session: the row must render 80%, not the payload's 52%.
   const limits =
     renderLine(parsePayload(promax), fixtureNow, {
@@ -173,7 +173,7 @@ test("resolved cross-session limits override the payload's own 5h/7d, while ctx 
       },
     }).split("\n")[1] ?? "";
   assert.match(limits, /ctx .* 24%/, "ctx is the per-session payload value");
-  assert.match(limits, /5h .* 80% ⟳ 2h00m/, "5h shows the resolved 80%");
+  assert.match(limits, /5h .* 80% ⟳ 2h/, "5h shows the resolved 80%");
   assert.ok(!limits.includes("52%"), "the payload's stale 5h is not rendered");
   assert.match(limits, /7d .* 90%/, "7d shows the resolved 90%");
 });
