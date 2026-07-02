@@ -10,6 +10,8 @@ import {
   upsertSession,
   upsertAccountLimit,
   getAccountLimit,
+  getMeta,
+  setMeta,
   countSessionsByClassForMonth,
   countLiveSessionsByClass,
   monthClassSpendRows,
@@ -207,20 +209,25 @@ export function foldLines(
   return { branch, modelClass: cls, tokens, costUsd: 0, lastTs };
 }
 
-export function discoverTranscriptPaths(claudeDir: string): string[] {
-  const paths: string[] = [];
-  let projectDirs: string[];
+// The per-project directories under ~/.claude/projects. Split out from
+// discoverTranscriptPaths so the hot path can stat these dirs for the H1 sweep
+// watermark (Discussion #63) without also enumerating every transcript file.
+function listProjectDirs(claudeDir: string): string[] {
   try {
-    projectDirs = readdirSync(claudeDir, {
-      withFileTypes: true,
-      encoding: "utf8",
-    })
+    return readdirSync(claudeDir, { withFileTypes: true, encoding: "utf8" })
       .filter((e) => e.isDirectory())
       .map((e) => join(claudeDir, e.name));
   } catch {
-    return paths;
+    return [];
   }
+}
 
+export function discoverTranscriptPaths(claudeDir: string): string[] {
+  return transcriptsIn(listProjectDirs(claudeDir));
+}
+
+function transcriptsIn(projectDirs: string[]): string[] {
+  const paths: string[] = [];
   for (const dir of projectDirs) {
     let entries: Dirent<string>[];
     try {
@@ -261,6 +268,54 @@ function subagentFilesIn(sessionDir: string): string[] {
   return entries
     .filter((e) => e.isFile() && e.name.endsWith(".jsonl"))
     .map((e) => join(subagentsDir, e.name));
+}
+
+// The H1 sweep-debounce watermark key in the meta table (Discussion #63). Scoped
+// by claudeDir: the watermark answers "has the structure under THIS root changed
+// since I last swept it", so a shared DB observed against different roots keeps
+// independent watermarks. In production claudeDir is the single ~/.claude/projects,
+// so this is one stable key.
+const SWEEP_WATERMARK_KEY_PREFIX = "sweep_dir_mtime_ns:";
+
+// The largest directory mtime across the given dirs, in nanoseconds. A directory's
+// mtime bumps when an entry is added/removed/renamed — i.e. when a *new* transcript
+// (or project) appears — but NOT on an in-place append to an existing file (verified
+// on the maintainer's btrfs). So this is a structural-change signal, not a growth
+// signal: it is exactly what tells the sweep whether a new session showed up since
+// last tick. Nanosecond resolution avoids same-millisecond false negatives between
+// fast successive changes. A vanished/unreadable dir simply does not contribute.
+function maxDirMtimeNs(dirs: string[]): bigint {
+  let max = 0n;
+  for (const dir of dirs) {
+    try {
+      const ns = statSync(dir, { bigint: true }).mtimeNs;
+      if (ns > max) max = ns;
+    } catch {
+      // A dir we cannot stat contributes nothing; the sweep still runs on any
+      // other change, and the active session is folded regardless.
+    }
+  }
+  return max;
+}
+
+// Fold just the active session's own transcript (and its subagents) on a quiet
+// tick, so the session the statusline belongs to is always fresh even when the
+// cross-project sweep is debounced away (Discussion #63, H1). In-place appends to
+// this transcript are invisible to the dir-mtime watermark, so it is folded
+// directly here every tick — cheap: one stat + at most this session's subagents.
+function updateActiveSession(
+  db: ReturnType<typeof openDb>,
+  activeTranscriptPath: string,
+  pricingTable: PricingTable,
+): void {
+  upsertTranscript(db, activeTranscriptPath, pricingTable);
+  const sessionDir = join(
+    dirname(activeTranscriptPath),
+    basename(activeTranscriptPath, ".jsonl"),
+  );
+  for (const sub of subagentFilesIn(sessionDir)) {
+    upsertTranscript(db, sub, pricingTable);
+  }
 }
 
 function rowToRecord(row: SessionRow): SessionRecord {
@@ -445,20 +500,40 @@ export async function updateIndex(
   claudeDir: string,
   pricingTable: PricingTable,
   observation?: LimitsObservation,
+  activeTranscriptPath?: string,
 ): Promise<CrossSessionIndex> {
   const db = openDb(indexPath);
 
-  const transcripts = discoverTranscriptPaths(claudeDir);
+  // H1 sweep debounce (Discussion #63). The full cross-project sweep is O(all
+  // transcripts) of stat + SQL on every refreshInterval tick, almost always to
+  // discover nothing new appeared. Gate it behind a structural-change signal —
+  // the max project-dir mtime — so an idle tick costs O(project dirs), not O(all
+  // transcripts). The active session is folded unconditionally below, so the
+  // session the statusline belongs to is never staleness-frozen by the debounce;
+  // another session's in-place growth is picked up by its own Stop-hook write
+  // (ADR-0003) and by the next sweep a structural change triggers.
+  const projectDirs = listProjectDirs(claudeDir);
+  const currentMtimeNs = maxDirMtimeNs([claudeDir, ...projectDirs]);
+  const watermarkKey = SWEEP_WATERMARK_KEY_PREFIX + claudeDir;
+  const storedWatermark = getMeta(db, watermarkKey);
+  // Equality, not `>`: any change to the max — a new file raising it OR a deletion
+  // lowering it — re-sweeps and re-stamps, so a watermark left high by a deletion
+  // can never wedge the debounce permanently shut. A first-ever tick (no stored
+  // value) always sweeps.
+  const structuralChange =
+    storedWatermark === undefined || currentMtimeNs !== BigInt(storedWatermark);
 
-  // Read-only tick invariant: the per-file `fileSize <= currentOffset` skip inside
-  // upsertTranscript is the debounce — when the statusline re-runs on its idle
-  // refreshInterval and no transcript has grown past its stored byte_offset, every
-  // file is skipped, nothing reaches upsertSession, and the function returns the
-  // rollups materialised purely from a read. Live counts stay correct because they
-  // recompute from each row's stored last_ts against the current clock downstream,
-  // so a session can age out of the liveness window with no new bytes and no write.
-  for (const transcriptPath of transcripts) {
-    upsertTranscript(db, transcriptPath, pricingTable);
+  if (structuralChange) {
+    // Read-only tick invariant still holds inside the sweep: the per-file
+    // `fileSize <= currentOffset` skip in upsertTranscript means a sweep where no
+    // file actually grew performs zero upserts. The watermark write is the only
+    // structural-tick cost; a quiet tick skips even that.
+    for (const transcriptPath of transcriptsIn(projectDirs)) {
+      upsertTranscript(db, transcriptPath, pricingTable);
+    }
+    setMeta(db, watermarkKey, String(currentMtimeNs));
+  } else if (activeTranscriptPath !== undefined) {
+    updateActiveSession(db, activeTranscriptPath, pricingTable);
   }
 
   const limits =
