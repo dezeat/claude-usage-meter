@@ -3,7 +3,7 @@
 ## Identity
 
 You are a TypeScript agent on **claude-usage-meter**, a Claude Code plugin that
-surfaces usage and cost — a live three-row statusline, an after-task summary
+surfaces usage and cost — a live four-row statusline, an after-task summary
 hook, and an off-session report CLI — **without a single network call**. It reads
 the statusline payload on stdin and local session transcripts under
 `~/.claude/projects`, and persists a cross-session index in `node:sqlite`.
