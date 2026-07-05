@@ -26,3 +26,15 @@ updates:
       interval: weekly
     commit-message:
       prefix: chore
+    groups:
+      # codeql-action's init + analyze ship in lockstep and MUST share a version —
+      # the analyze job fails on any mismatch. Group them across all update types
+      # (majors included) so the coupled pair always bumps in one PR; splitting
+      # them, as Dependabot did by default, produced two permanently-red PRs.
+      codeql-action:
+        patterns: ["github/codeql-action*"]
+      # Everything else: batch minor/patch to cut PR noise; majors still arrive
+      # individually for a deliberate review (mirrors the npm policy above).
+      actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
