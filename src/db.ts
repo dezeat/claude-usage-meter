@@ -196,8 +196,7 @@ export function openDb(dbPath: string): DatabaseSync {
 
 export function schemaVersion(db: DatabaseSync): number {
   const row = db.prepare("PRAGMA user_version").get() as unknown as
-    | { user_version: number }
-    | undefined;
+    { user_version: number } | undefined;
   return row?.user_version ?? 0;
 }
 
@@ -459,8 +458,7 @@ export function getAccountLimit(
 // was never written.
 export function getMeta(db: DatabaseSync, key: string): string | undefined {
   const raw = db.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
-    | { value: string }
-    | undefined;
+    { value: string } | undefined;
   return raw?.value;
 }
 
