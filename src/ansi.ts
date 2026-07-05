@@ -9,12 +9,7 @@ export const ANSI = {
 } as const;
 
 export type ColorName =
-  | "green"
-  | "yellow"
-  | "red"
-  | "brightWhite"
-  | "dim"
-  | "accent";
+  "green" | "yellow" | "red" | "brightWhite" | "dim" | "accent";
 
 export function paint(
   text: string,
