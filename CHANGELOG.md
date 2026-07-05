@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.0.1](https://github.com/dezeat/claude-usage-meter/compare/v1.0.0...v1.0.1) (2026-07-05)
+
+
+### CI
+
+* bump codeql-action to v4 and group the coupled init/analyze pair ([9d981bb](https://github.com/dezeat/claude-usage-meter/commit/9d981bb77ed890f38c3b6578bec9d6b9338505e6))
+
 ## 1.0.0 (2026-07-02)
 
 ### Features
