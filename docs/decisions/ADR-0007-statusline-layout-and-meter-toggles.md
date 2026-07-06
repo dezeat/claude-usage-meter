@@ -23,8 +23,8 @@ read at the I/O edge from environment variables and passed as options into the
 pure `renderLine` — the pure core stays clock-free, `process`-free, and
 env-free.
 
-- **`USAGE_METER_LAYOUT`** = `line` (**default** — a single-line HUD) | `block`
-  (the four stacked rows).
+- **`USAGE_METER_LAYOUT`** = `block` (**default** — the four stacked rows) | `line`
+  (a single-line HUD).
 - **`USAGE_METER_METERS`** = `bar` (**default** — short bar glyphs) | `pill`
   (reverse-video severity chips).
 
@@ -43,7 +43,8 @@ Binding constraints this records:
    The glyph/layout layer stays a complete encoding; color is only a hue layer on
    top.
 
-Defaults are chosen so the out-of-box look is `line` + `bar`.
+Defaults are chosen so the out-of-box look is `block` + `bar` — the four labelled
+rows; the single-line HUD is one opt-in env var away.
 
 ## Consequences
 

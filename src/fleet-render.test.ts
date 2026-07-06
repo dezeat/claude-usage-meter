@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 
 import {
   LIVENESS_WINDOW_MS,
+  fleetLineSegments,
   liveClassCounts,
   monthClassCounts,
   renderFleet,
@@ -338,6 +339,33 @@ test("month counts include only current-month sessions and exclude the prior mon
   );
   const total = counts.reduce((s, c) => s + c.count, 0);
   assert.strictEqual(total, 3, "month total counts only June's 3 sessions");
+});
+
+test("the HUD roster abbreviates each live class to its initial with a parenthesised count", () => {
+  const idx = makeIndex(
+    [
+      { modelClass: "opus", lastTs: NOW_MS, costUsd: 1 },
+      { modelClass: "sonnet", lastTs: NOW_MS, costUsd: 1 },
+    ],
+    0,
+  );
+  const month = new Date(NOW_MS).toISOString().slice(0, 7);
+  const { fleet } = fleetLineSegments(
+    idx,
+    EMPTY_INDEX_PATH,
+    "opus",
+    undefined,
+    undefined,
+    month,
+    NOW_MS,
+    false,
+  );
+  const roster = fleet[fleet.length - 1]?.text ?? "";
+  assert.strictEqual(roster, "●o(1) ●s(1)");
+  assert.ok(
+    !roster.includes("opus") && !roster.includes("sonnet"),
+    "the HUD roster spells no class name in full",
+  );
 });
 
 test("the fleet count and live tally exclude subagent records — a subagent is not a session", () => {
