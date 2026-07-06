@@ -7,6 +7,7 @@ import {
   monthOf,
   sessionTotals,
 } from "./index-store.js";
+import { type LineSegment } from "./layout.js";
 
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
 
@@ -65,6 +66,33 @@ export function liveClassCounts(
 // session is live, by a roster cell tallying live sessions per class as
 // `● <class> <n> …`. The current session is excluded from the live tally (it is
 // "besides you"), so the roster cell vanishes when nothing else is live.
+// The `<current> Σ <total>` count cell: the active class's month count, a dim Σ
+// connective, then the month grand total. Shared by the block roster and the
+// single-line HUD so the two presentations can't drift.
+function countCell(
+  monthCounts: ClassCount[],
+  currentClass: string,
+  color: boolean,
+): string {
+  const total = monthCounts.reduce((sum, c) => sum + c.count, 0);
+  const current = monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
+  return `${paint(`${current}`, "brightWhite", color)} ${paint(
+    "Σ",
+    "dim",
+    color,
+  )} ${paint(`${total}`, "brightWhite", color)}`;
+}
+
+// The live roster: `● <class> <n>` per live class, space-joined.
+function rosterCell(live: ClassCount[], color: boolean): string {
+  return live
+    .map(
+      (c) =>
+        `${paint("●", "green", color)} ${paint(`${c.cls} ${c.count}`, "brightWhite", color)}`,
+    )
+    .join(" ");
+}
+
 export function renderRoster(
   index: CrossSessionIndex,
   currentClass: string,
@@ -74,27 +102,11 @@ export function renderRoster(
   excludeSessionId?: string,
 ): string[] {
   const monthCounts = monthClassCounts(index.sessions, month);
-  const total = monthCounts.reduce((sum, c) => sum + c.count, 0);
-
-  const currentCount =
-    monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
-
-  const countCell = `${paint(`${currentCount}`, "brightWhite", color)} ${paint(
-    "Σ",
-    "dim",
-    color,
-  )} ${paint(`${total}`, "brightWhite", color)}`;
+  const count = countCell(monthCounts, currentClass, color);
 
   const live = liveClassCounts(index.sessions, nowMs, excludeSessionId);
-  if (live.length === 0) return [countCell];
-
-  const rosterCell = live
-    .map(
-      (c) =>
-        `${paint("●", "green", color)} ${paint(`${c.cls} ${c.count}`, "brightWhite", color)}`,
-    )
-    .join(" ");
-  return [countCell, rosterCell];
+  if (live.length === 0) return [count];
+  return [count, rosterCell(live, color)];
 }
 
 // The month Σ ledger cell for the spend row (ADR-0006): `Σ $<total> mo`, painted
@@ -235,4 +247,51 @@ export function renderFleet(
       session.sessionId,
     ),
   };
+}
+
+// The spend and fleet cells as HUD segments carrying their shed priorities
+// (ADR-0007 drop order): the dim Σ month ledger goes first (1), the count cell
+// second (2 — the live roster outlives it), the cache% cell fifth (5), and the
+// roster collapses to a bare `●<N>` last (6). The `ses` cell is load-bearing and
+// carries no priority. Same figures as renderFleet, tagged for the shedder.
+export function fleetLineSegments(
+  index: CrossSessionIndex,
+  indexPath: string,
+  currentClass: string,
+  sessionCostUsd: number | undefined,
+  durationMs: number | undefined,
+  month: string,
+  nowMs: number,
+  color: boolean,
+  session: SessionRef = {},
+): { spend: LineSegment[]; fleet: LineSegment[] } {
+  const total = renderMonthly(indexPath, month, color);
+  const { ses, cache } = renderSpend(
+    index,
+    sessionCostUsd,
+    durationMs,
+    session,
+    color,
+  );
+
+  const spend: LineSegment[] = [];
+  if (ses !== "") spend.push({ text: ses });
+  if (cache !== "") spend.push({ text: cache, priority: 5 });
+  spend.push({ text: total, priority: 1 });
+
+  const monthCounts = monthClassCounts(index.sessions, month);
+  const fleet: LineSegment[] = [
+    { text: countCell(monthCounts, currentClass, color), priority: 2 },
+  ];
+  const live = liveClassCounts(index.sessions, nowMs, session.sessionId);
+  if (live.length > 0) {
+    const liveTotal = live.reduce((sum, c) => sum + c.count, 0);
+    fleet.push({
+      text: rosterCell(live, color),
+      reduced: `${paint("●", "green", color)}${paint(`${liveTotal}`, "brightWhite", color)}`,
+      priority: 6,
+    });
+  }
+
+  return { spend, fleet };
 }
