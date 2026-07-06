@@ -4,22 +4,42 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%E2%89%A522.13-339933?logo=node.js&logoColor=white)](package.json)
 
-A [Claude Code](https://code.claude.com) plugin that surfaces your usage at a
-glance. It reads only the statusline payload Claude Code pipes in on stdin and
-your local session transcripts under `~/.claude/projects` — **no network, no
-telemetry, zero runtime dependencies**, just the Node built-in `node:sqlite`.
+A [Claude Code](https://code.claude.com) plugin that turns usage and cost into a
+**live statusline cockpit** — one glance shows the running model, where you're
+rooted, account limits, live spend, and every parallel session across your
+worktrees. **No network, no telemetry, zero runtime dependencies**: it reads only
+the statusline payload Claude Code pipes in on stdin and your local session
+transcripts under `~/.claude/projects`, and persists a cross-session index in the
+Node built-in `node:sqlite` — nothing ever leaves your machine.
 
-![claude-usage-meter statusline — the current, limits, spend and fleet rows](assets/statusline.svg)
+![claude-usage-meter statusline — the block layout: current, limits, spend and fleet rows with bar meters](assets/statusline.svg)
 
-The four-row statusline above reads top to bottom: the active **model** and where
-you're rooted, account **limits** with pace bars, cost-forward **spend**, and a
-cross-session **fleet** view.
+The default is a **four-row block**: **current** names the active model and where
+you're rooted, **limits** shows account usage as short pace bars, **spend** is
+cost-forward with a live burn rate, and **fleet** counts your cross-session
+sessions and names who else is live — every field and row-group separated by a dim
+`·`, each row label accent-coloured.
+
+Prefer one compact line instead? The single-line **HUD** is one env var away
+(`USAGE_METER_LAYOUT=line`, [Layout & meters](#layout--meters)):
+
+![claude-usage-meter statusline — the single-line HUD folding all four rows into one wide line](assets/statusline-hud.svg)
+
+The HUD folds the same fields onto **one line that never wraps**: it reads the
+terminal width from `COLUMNS` (fallback `80`) and sheds low-priority fields —
+trails, then totals, then labels — until the line fits, so a narrow prompt
+degrades gracefully instead of spilling onto a second row. To stay compact it
+abbreviates the live roster to its initials (`●o(3)`) and the cache share to
+`96%c`.
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
-> idle / accumulated / chrome (a faint `·` separates fields), the row label is
-> accent-coloured, a green `●` marks a live session, and bars run green → yellow →
-> red by fill. `NO_COLOR` is honoured — every glyph and the layout survive, only
-> the hue layer is dropped.
+> idle / accumulated / chrome (a dim `·` separates every field and row-group), a
+> green `●` marks a live session, bars run green → yellow → red by fill, and in
+> the `block` layout the row label is accent-coloured. Swap bars for reverse-video
+> severity **pills** with `USAGE_METER_METERS=pill` ([Layout & meters](#layout--meters)).
+> `NO_COLOR` is honoured — every glyph and the layout survive, only the hue layer
+> is dropped; a pill degrades to bracketed text (`[85%]`) so its value and shape
+> outlive the colour.
 
 It ships three views over the same local data: the **live statusline** above
 (redrawn on Claude Code's `refreshInterval`), an **after-task cost summary** — a
@@ -27,12 +47,19 @@ per-model token and dollar breakdown printed when a task finishes (a `Stop` hook
 — and an **off-session report**, a retrospective CLI dashboard across every
 project session.
 
+**Why this and not [ccusage](https://github.com/ryoppippi/ccusage)?** ccusage is
+an excellent off-line CLI report; this is the complementary piece — a _live_
+statusline you read while you work, built for parallel worktree sessions, with a
+cross-session fleet view that names the other models running right now. Same
+zero-network, local-transcript accounting (it dedupes exactly as ccusage does),
+different cadence. Run both.
+
 ## What each row shows
 
 **current** — the active model and where the session is rooted:
 
-- **Model + version**, lowercased (`opus 4.8`). Because the model lives here, the
-  rows below use a neutral `mdl` self-tag instead of repeating the class name.
+- **Model + version**, lowercased (`opus 4.8`). It leads the line, so the rows
+  below never repeat the class name.
 - **Repo and git branch** after a `⎇`, then the **working tree** after a `⌂` —
   `root` for the main checkout, the linked-worktree name inside one — so you
   always know which of several parallel sessions this is.
@@ -41,27 +68,40 @@ project session.
 
 **limits** — account-wide, no model (it leads `current` above):
 
-- **Context + 5-hour + 7-day** usage bars (`▓` filled, `░` empty) with reset
-  countdowns after `⟳`, shown as the largest unit only (`2h`, `4d`); the
-  **7-day** reset also spells out its absolute day (`⟳ 4d (Tu 16.06)`).
+- **Context + 5-hour + 7-day** usage as three short bars (`▓` filled, `░` empty);
+  the **percentage beside each bar carries the precision** the coarse three-cell
+  bar gives up. Reset countdowns follow after `⟳`, shown as the largest unit only
+  (`2h`, `4d`); the **7-day** reset also spells out its absolute day
+  (`⟳ 4d (Sa 20.06)`).
 - Bars colour by flat fill %. The bright `│` is the **even-pace tick** on the
-  5h/7d bars (where usage _should_ be for an even burn); it never drives colour.
+  5h/7d bars (where usage _should_ be for an even burn); it never drives colour,
+  and it is a pace marker, **not** a field separator.
+- Swap `USAGE_METER_METERS=pill` and each bar becomes a reverse-video severity
+  **pill** — the same green → yellow → red ramp as a compact chip.
 
-**spend** — cost-forward, **`$` leads, tokens trail dim**:
+**spend** — cost-forward, live figures bright:
 
-- This **session** (live), then **this model** (`mdl`) this month.
-- **`Σ`** — the month total across every class.
-- Each cell's token trail splits as **`i:420.0k|c:11.9M|o:14.0k`** — fresh
-  **i**nput (cache writes included), **c**ached reads, **o**utput. `c` is the
-  ~free bucket that explains a low dollar figure; `i+c+o` is the cell's total.
+- **`ses`** — this **session**, live: the cost, then a burn rate after an accent
+  `↑` (`$4.10/hr`) whenever a duration is known.
+- **Cache-read share** — `96%c` in the HUD, `96% cached` in the block layout: the
+  fraction of tokens served from cache. It replaces the old raw `i:|c:|o:` token
+  trail and is the one cue that explains a surprisingly-low cost — agentic usage
+  is cache-read-dominated, and a cache read is far cheaper than fresh output.
+- **`Σ … mo`** — the dim month ledger, the total cost across every class this
+  month. The per-class month cost cell (`mdl $…`) is **gone from the live line** —
+  it is reference-cadence data now served by the report CLI
+  ([ADR-0006](docs/decisions/ADR-0006-drop-spend-mdl-cell.md)).
 
-**fleet** — `mdl <count> Σ <total>` then `active` (e.g. `9 Σ 23`):
+**fleet** — session counts first, then who else is live (e.g. `4 Σ 8`):
 
-- **This model** (`mdl`), its sessions **this month**, a dim `Σ`, then the
-  **month total** across every class.
-- **`active`** — other sessions live right now per class, named by their real
-  class (the row's one exception to `mdl`) and **excluding the one you're in**. A
-  green `●` leads each live class; the cell is dropped when nothing else is live.
+- **`<n> Σ <total>`** — the active class's sessions **this month**, a dim `Σ`
+  connective, then the **month total** across every class. The `current` row
+  already names the active model, so this count cell carries no self-tag.
+- **Live roster** — `● <class> <n> …`, the other sessions live right now per
+  class, named by their real class and **excluding the one you're in**. A green
+  `●` leads each live class; the roster is dropped when nothing else is live. The
+  `block` layout spells the class out (`● opus 3`); the single-line HUD abbreviates
+  it to the class initial with the count in parens (`●o(3)`) to stay on one line.
 
 ### Subagents
 
@@ -69,11 +109,11 @@ A subagent runs in its own transcript file (`isSidechain`) but is not a separate
 user session, so it is accounted carefully:
 
 - Its cost **rolls into the parent session's `ses` total**.
-- In the **per-class spend cells** it is priced under the **subagent's own model
-  class**, never relabelled — a Haiku subagent under an Opus parent shows as Haiku
-  spend, because that is what was billed.
-- The **session counts** (`fleet`'s `N Σ total` and the `active ●` tally) include
-  only top-level sessions, so a subagent is never tallied as one.
+- In the **per-class breakdowns** (report CLI, `Stop` summary) it is priced under
+  the **subagent's own model class**, never relabelled — a Haiku subagent under an
+  Opus parent shows as Haiku spend, because that is what was billed.
+- The **session counts** (`fleet`'s `<n> Σ <total>` and the live `●` roster)
+  include only top-level sessions, so a subagent is never tallied as one.
 
 So the fleet count can show `0` haiku _sessions_ alongside nonzero haiku _spend_ —
 a subagent produced Haiku cost without being a session. Correct, not a bug.
@@ -97,10 +137,11 @@ covers the moving parts (pure-core / I-O-edge split, three data flows).
   [ccusage](https://github.com/ryoppippi/ccusage) does, so a resumed or retried
   turn is never double-counted, then priced by the `pricing.ts` table (dateless
   aliases; a `-YYYYMMDD` snapshot prices as its alias).
-- **`mdl` this month, `Σ`, and the fleet counts** come from the cross-session
+- **The `Σ` month total and the fleet counts** come from the cross-session
   `node:sqlite` index — one row per **top-level** session carrying its priced cost
-  and model class. `active ●` tallies sessions whose `lastTs` is within the
-  liveness window (`LIVENESS_WINDOW_MS`, 5 min), **excluding the one you're in**.
+  and model class. The live `●` roster tallies sessions whose `lastTs` is within
+  the liveness window (`LIVENESS_WINDOW_MS`, 5 min), **excluding the one you're
+  in**.
 - **Two cost sources, one rule.** The payload's running `cost.total_cost_usd` is
   authoritative for the **live, not-yet-indexed** session (the `ses` cell falls
   back to it); the index's price-table calc is authoritative for everything
@@ -173,6 +214,37 @@ the **absolute** path to your clone:
   under `~/.claude/projects` — skips the cross-project sweep and the index write
   entirely behind a directory-mtime watermark; the active session is still
   re-read every tick, so its numbers never go stale.
+
+### Layout & meters
+
+The statusline has two orthogonal presentation toggles, read from environment
+variables set inline in the `command` exactly like `NO_COLOR`
+([ADR-0007](docs/decisions/ADR-0007-statusline-layout-and-meter-toggles.md)):
+
+- **`USAGE_METER_LAYOUT`** — `block` (**default**, the four stacked rows) or `line`
+  (the single-line HUD).
+- **`USAGE_METER_METERS`** — `bar` (**default**, short pace bars) or `pill`
+  (reverse-video severity chips; degrades to bracketed text `[85%]` under
+  `NO_COLOR`).
+
+They compose into four looks; an unrecognized value falls back to the default and
+never throws. Here is the `block` layout with `pill` meters:
+
+![claude-usage-meter statusline — the block layout with pill meters](assets/statusline-block.svg)
+
+```json
+{
+  "statusLine": {
+    "type": "command",
+    "command": "USAGE_METER_LAYOUT=block USAGE_METER_METERS=pill node /home/you/.claude/tools/claude-usage-meter/dist/statusline.js 2>/dev/null",
+    "refreshInterval": 10
+  }
+}
+```
+
+The `line` HUD guarantees it never wraps by reading the terminal width from
+`COLUMNS` — Claude Code sets it (v2.1.153+); absent, it falls back to `80`
+columns.
 
 ### Manual hooks (clone-only, no marketplace)
 
