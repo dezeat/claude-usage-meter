@@ -103,6 +103,12 @@ export function sesCell(costUsd, durationMs, color) {
 function cacheCell(pct, color) {
     return `${paint(`${pct}%`, "brightWhite", color)} ${paint("cached", "dim", color)}`;
 }
+// The one-line HUD's compact cache cell: bright `<pct>%` · dim `c`. The HUD is
+// width-bound, so it trades the `cached` word for a single-letter suffix (`96%c`);
+// the roomier block layout keeps the spelled-out `cacheCell` above.
+function cacheCellCompact(pct, color) {
+    return `${paint(`${pct}%`, "brightWhite", color)}${paint("c", "dim", color)}`;
+}
 function renderSpend(index, sessionCostUsd, durationMs, session, color) {
     const totals = sessionTotals(index, session.sessionId, session.transcriptPath);
     // The two-cost-source rule (ADR-0004): when the session is in the store its
@@ -110,16 +116,18 @@ function renderSpend(index, sessionCostUsd, durationMs, session, color) {
     // yield the cache% cell; only the not-yet-indexed live session falls back to
     // the payload's `cost.total_cost_usd`, which carries no tokens (no cache cell).
     if (totals !== undefined) {
-        const share = cacheReadShare(sumUsage(totals.tokens));
         return {
             ses: sesCell(totals.costUsd, durationMs, color),
-            cache: share === undefined ? "" : cacheCell(share, color),
+            share: cacheReadShare(sumUsage(totals.tokens)),
         };
     }
     if (sessionCostUsd !== undefined) {
-        return { ses: sesCell(sessionCostUsd, durationMs, color), cache: "" };
+        return {
+            ses: sesCell(sessionCostUsd, durationMs, color),
+            share: undefined,
+        };
     }
-    return { ses: "", cache: "" };
+    return { ses: "", share: undefined };
 }
 // The spend and fleet row cells (board section 1), already painted but WITHOUT
 // field separators — the line assembler joins them with the shared dot
@@ -130,12 +138,12 @@ function renderSpend(index, sessionCostUsd, durationMs, session, color) {
 // through so the live roster tally excludes it.
 export function renderFleet(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}) {
     const total = renderMonthly(indexPath, month, color);
-    const { ses, cache } = renderSpend(index, sessionCostUsd, durationMs, session, color);
+    const { ses, share } = renderSpend(index, sessionCostUsd, durationMs, session, color);
     const spendCells = [];
     if (ses !== "")
         spendCells.push(ses);
-    if (cache !== "")
-        spendCells.push(cache);
+    if (share !== undefined)
+        spendCells.push(cacheCell(share, color));
     spendCells.push(total);
     return {
         spendCells,
@@ -149,12 +157,12 @@ export function renderFleet(index, indexPath, currentClass, sessionCostUsd, dura
 // carries no priority. Same figures as renderFleet, tagged for the shedder.
 export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}) {
     const total = renderMonthly(indexPath, month, color);
-    const { ses, cache } = renderSpend(index, sessionCostUsd, durationMs, session, color);
+    const { ses, share } = renderSpend(index, sessionCostUsd, durationMs, session, color);
     const spend = [];
     if (ses !== "")
         spend.push({ text: ses });
-    if (cache !== "")
-        spend.push({ text: cache, priority: 5 });
+    if (share !== undefined)
+        spend.push({ text: cacheCellCompact(share, color), priority: 5 });
     spend.push({ text: total, priority: 1 });
     const monthCounts = monthClassCounts(index.sessions, month);
     const fleet = [
