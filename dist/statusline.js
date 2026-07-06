@@ -13,6 +13,21 @@ function colorEnabled() {
     const flag = process.env.NO_COLOR;
     return flag === undefined || flag === "";
 }
+// ADR-0007 presentation toggles, read at the edge exactly like NO_COLOR. An
+// unrecognized value degrades to the product default (line + bar); the pure
+// renderer never sees an env var. The product default layout is `line`.
+function layoutMode() {
+    return process.env.USAGE_METER_LAYOUT === "block" ? "block" : "line";
+}
+function meterMode() {
+    return process.env.USAGE_METER_METERS === "pill" ? "pill" : "bar";
+}
+// Terminal width for the never-wrap HUD. Claude Code sets COLUMNS; an absent,
+// non-numeric, or non-positive value falls back to 80.
+function terminalColumns() {
+    const parsed = Number.parseInt(process.env.COLUMNS ?? "", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 80;
+}
 async function main() {
     const raw = await readStdin();
     const payload = JSON.parse(raw);
@@ -35,6 +50,9 @@ async function main() {
         indexPath: INDEX_PATH,
         location: resolveLocation(parsed.cwd),
         limits: index?.limits,
+        layout: layoutMode(),
+        meters: meterMode(),
+        columns: terminalColumns(),
     });
     process.stdout.write(`${line}\n`);
 }

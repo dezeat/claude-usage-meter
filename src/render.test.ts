@@ -328,3 +328,80 @@ test("row labels are painted accent", () => {
     );
   }
 });
+
+test("meters:pill renders the limit as a bracket chip with no bar glyphs, ctx included", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    meters: "pill",
+    limits: {
+      fiveHour: {
+        usedPercentage: 85,
+        resetsAt: promax.rate_limits.five_hour.resets_at,
+      },
+    },
+  });
+  const limits = line.split("\n")[1] ?? "";
+  assert.match(
+    limits,
+    /5h \[85%\]/,
+    "the pill is the bracket fallback under NO_COLOR",
+  );
+  assert.match(limits, /ctx \[24%\]/, "ctx becomes a pill too");
+  assert.ok(!limits.includes("▓"), "no filled bar glyphs in pill mode");
+  assert.ok(!limits.includes("░"), "no empty bar glyphs in pill mode");
+  // The reset countdown is unchanged — it still trails the 5h/7d chips.
+  assert.match(limits, /5h \[85%\] ⟳ 2h/, "the reset trail survives the pill");
+});
+
+test("meters:bar (default) leaves the limits row byte-for-byte unchanged", () => {
+  const withDefault = fullRender(false).split("\n")[1];
+  const explicitBar =
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: false,
+      meters: "bar",
+      index: populatedIndex(),
+      indexPath: ":memory:",
+    }).split("\n")[1] ?? "";
+  assert.equal(explicitBar, withDefault, "bar is the untouched default look");
+  assert.ok(
+    explicitBar.includes("▓"),
+    "the bar glyphs are present in bar mode",
+  );
+});
+
+test("layout:line collapses the four rows into one line starting with the model", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    layout: "line",
+    index: populatedIndex(),
+    indexPath: ":memory:",
+    columns: 200,
+  });
+  assert.ok(!line.includes("\n"), "the HUD is a single physical line");
+  assert.ok(line.includes(" · "), "rows join with the dim dot");
+  assert.ok(line.startsWith("opus 4.8"), "the line starts with the model");
+  assert.ok(!/\bcurrent\b/.test(line), "the HUD drops the row labels");
+});
+
+test("the default layout still renders the four labelled block rows", () => {
+  const rows = fullRender(false).split("\n");
+  assert.equal(rows.length, 4, "the block layout is the in-renderLine default");
+  assert.match(rows[0] ?? "", /^current /);
+});
+
+for (const columns of [80, 60, 40, 20, 8]) {
+  test(`layout:line never emits a line wider than columns=${columns}`, () => {
+    const line = renderLine(parsePayload(promax), fixtureNow, {
+      color: true,
+      layout: "line",
+      index: populatedIndex(),
+      indexPath: ":memory:",
+      columns,
+    });
+    assert.ok(!line.includes("\n"), "still a single line");
+    assert.ok(
+      visibleLength(line) <= columns,
+      `visible width ${visibleLength(line)} exceeds ${columns}`,
+    );
+  });
+}
