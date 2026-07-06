@@ -1,5 +1,9 @@
 import { paint } from "./ansi.js";
 export const BAR_WIDTH = 6;
+// The facelift's shorter bar (ADR-0007): a 3-cell meter reclaims width for the
+// single-line HUD. The percentage beside it carries the precision the coarser
+// bar gives up, so glance-magnitude survives at a quarter of the columns.
+export const SHORT_BAR_WIDTH = 3;
 export const FILLED = "▓";
 export const EMPTY = "░";
 export const MARKER = "│";
@@ -14,9 +18,6 @@ export function elapsedFraction(resetsAt, windowSeconds, now) {
     const remainingSeconds = resetsAt - now.getTime() / 1000;
     return clamp(1 - remainingSeconds / windowSeconds, 0, 1);
 }
-// One flat colour rule for every bar: cell colour is the absolute used %, not
-// pace and not a per-bar threshold. Green ≤ 50, yellow 51–70, red > 70 (board
-// section 2, user-validated). Shared by the context bar and the 5h/7d bars.
 export function fillColor(usedPercentage) {
     const used = clamp(usedPercentage, 0, 100);
     if (used <= 50)
@@ -29,28 +30,28 @@ export function fillColor(usedPercentage) {
 // hint; it no longer drives any cell's colour (colour is the flat % rule). The
 // marker is drawn between cells, so the loop runs one extra step to place it at
 // markerSlot ∈ [0, BAR_WIDTH].
-export function paceBar(usedPercentage, paceFraction, color) {
+export function paceBar(usedPercentage, paceFraction, color, width = BAR_WIDTH) {
     const used = clamp(usedPercentage, 0, 100);
-    const fill = Math.round((used / 100) * BAR_WIDTH);
-    const markerSlot = clamp(Math.round(paceFraction * BAR_WIDTH), 0, BAR_WIDTH);
+    const fill = Math.round((used / 100) * width);
+    const markerSlot = clamp(Math.round(paceFraction * width), 0, width);
     const cellColor = fillColor(used);
     let out = "";
-    for (let i = 0; i <= BAR_WIDTH; i++) {
+    for (let i = 0; i <= width; i++) {
         if (i === markerSlot)
             out += paint(MARKER, "brightWhite", color);
-        if (i === BAR_WIDTH)
+        if (i === width)
             break;
         out +=
             i < fill ? paint(FILLED, cellColor, color) : paint(EMPTY, "dim", color);
     }
     return out;
 }
-export function contextBar(usedPercentage, color) {
+export function contextBar(usedPercentage, color, width = BAR_WIDTH) {
     const used = clamp(usedPercentage, 0, 100);
-    const fill = Math.round((used / 100) * BAR_WIDTH);
+    const fill = Math.round((used / 100) * width);
     const cellColor = fillColor(used);
     let out = "";
-    for (let i = 0; i < BAR_WIDTH; i++) {
+    for (let i = 0; i < width; i++) {
         out +=
             i < fill ? paint(FILLED, cellColor, color) : paint(EMPTY, "dim", color);
     }

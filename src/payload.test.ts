@@ -27,6 +27,22 @@ test("a full Pro/Max payload narrows to every field", () => {
   });
 });
 
+test("total_duration_ms narrows to durationMs alongside costUsd", () => {
+  const parsed = parsePayload({
+    cost: { total_cost_usd: 3.45, total_duration_ms: 1_800_000 },
+  });
+
+  assert.equal(parsed.durationMs, 1_800_000);
+});
+
+test("durationMs is undefined when cost or the duration field is absent", () => {
+  assert.equal(parsePayload({}).durationMs, undefined);
+  assert.equal(
+    parsePayload({ cost: { total_cost_usd: 1.0 } }).durationMs,
+    undefined,
+  );
+});
+
 test("absent rate_limits leaves both windows undefined", () => {
   const parsed = parsePayload({
     model: { display_name: "Opus 4.8" },
@@ -65,6 +81,7 @@ test("a non-object payload parses to an empty result", () => {
     modelName: undefined,
     contextPercentage: undefined,
     costUsd: undefined,
+    durationMs: undefined,
     fiveHour: undefined,
     sevenDay: undefined,
     sessionId: undefined,

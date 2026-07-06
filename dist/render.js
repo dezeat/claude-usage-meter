@@ -1,6 +1,6 @@
 import { paint, padVisible } from "./ansi.js";
-import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, contextBar, elapsedFraction, formatCountdown, formatResetDate, paceBar, } from "./bars.js";
-import { costForward, renderFleet } from "./fleet-render.js";
+import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, SHORT_BAR_WIDTH, contextBar, elapsedFraction, formatCountdown, formatResetDate, paceBar, } from "./bars.js";
+import { renderFleet, sesCell } from "./fleet-render.js";
 import { modelClass, } from "./index-store.js";
 import {} from "./payload.js";
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
@@ -15,7 +15,7 @@ function joinFields(cells, color) {
 }
 function renderLimit(label, window, windowSeconds, now, color, showResetDate = false) {
     const fraction = elapsedFraction(window.resetsAt, windowSeconds, now);
-    const bar = paceBar(window.usedPercentage, fraction, color);
+    const bar = paceBar(window.usedPercentage, fraction, color, SHORT_BAR_WIDTH);
     const percentage = `${Math.round(window.usedPercentage)}%`;
     const remainingSeconds = window.resetsAt - now.getTime() / 1000;
     // The 7d window resets days out, so its absolute day ("Tue 16.06") is the
@@ -34,7 +34,7 @@ function limitsCells(payload, limits, now, color) {
     const fiveHour = limits?.fiveHour ?? payload.fiveHour;
     const sevenDay = limits?.sevenDay ?? payload.sevenDay;
     if (payload.contextPercentage !== undefined) {
-        const bar = contextBar(payload.contextPercentage, color);
+        const bar = contextBar(payload.contextPercentage, color, SHORT_BAR_WIDTH);
         cells.push(`ctx ${bar} ${Math.round(payload.contextPercentage)}%`);
     }
     if (fiveHour) {
@@ -96,7 +96,7 @@ export function renderLine(payload, now, options = {}) {
     const index = options.index ?? null;
     if (index !== null) {
         const month = now.toISOString().slice(0, 7);
-        const { spendCells, fleetCells } = renderFleet(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath });
+        const { spendCells, fleetCells } = renderFleet(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, payload.durationMs, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath });
         const spend = joinFields(spendCells, color);
         const fleet = joinFields(fleetCells, color);
         if (spend !== "")
@@ -106,8 +106,10 @@ export function renderLine(payload, now, options = {}) {
     }
     else if (payload.costUsd !== undefined) {
         // No store this render: the payload cost is the live session's authority
-        // (ADR-0004), cost-only (no token totals available without the index).
-        const ses = costForward("ses", payload.costUsd, color);
+        // (ADR-0004), cost-only (no token totals available without the index, so no
+        // cache% cell). The burn rate still renders when the payload carries a
+        // duration.
+        const ses = sesCell(payload.costUsd, payload.durationMs, color);
         rows.push(labelled("spend", ses, color));
     }
     if (rows.length === 0) {

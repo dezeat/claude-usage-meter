@@ -1,5 +1,5 @@
 import { paint } from "./ansi.js";
-import { formatUsd, sumUsage, tokenTrail } from "./format.js";
+import { burnRate, cacheReadShare, formatUsd, sumUsage } from "./format.js";
 import {
   type ClassCount,
   type CrossSessionIndex,
@@ -9,12 +9,6 @@ import {
 } from "./index-store.js";
 
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
-
-// The active model's own class is named on the `now` row ("opus 4.8"), so the
-// rows below it would only repeat that identity. They use this neutral self-tag
-// instead — "this model" — freeing the real class names for the live `active ●`
-// tally, where they distinguish *other* sessions' models.
-export const SELF_LABEL = "mdl";
 
 function sortClassCounts(counts: Map<string, number>): ClassCount[] {
   return Array.from(counts, ([cls, count]) => ({ cls, count })).sort((a, b) => {
@@ -63,15 +57,14 @@ export function liveClassCounts(
   return sortClassCounts(counts);
 }
 
-// The fleet row cells (board section 1): a count cell — the neutral self-tag
-// (`mdl`, since the current row already names the active model), the active class's
-// month session count, a Σ connective, then the month grand total across all
-// classes: `mdl <current> Σ <total>`. The self-tag and the Σ are dim (the Σ
-// reads as a quiet connective, matching the Σ on the spend row); the two counts
-// are bright. Followed, only when another
-// session is live, by an `active` cell tallying live sessions per class as
-// `active ● <class> <n> …`. The current session is excluded from the live tally
-// (it is "besides you"), so the active cell vanishes when nothing else is live.
+// The fleet row cells (board section 1): a count cell — the active class's month
+// session count, a Σ connective, then the month grand total across all classes:
+// `<current> Σ <total>`. The Σ is dim (a quiet connective, matching the Σ on the
+// spend row); the two counts are bright. The current row already names the active
+// model, so the count cell carries no self-tag. Followed, only when another
+// session is live, by a roster cell tallying live sessions per class as
+// `● <class> <n> …`. The current session is excluded from the live tally (it is
+// "besides you"), so the roster cell vanishes when nothing else is live.
 export function renderRoster(
   index: CrossSessionIndex,
   currentClass: string,
@@ -86,82 +79,73 @@ export function renderRoster(
   const currentCount =
     monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
 
-  const countCell = `${paint(SELF_LABEL, "dim", color)} ${paint(
-    `${currentCount}`,
-    "brightWhite",
+  const countCell = `${paint(`${currentCount}`, "brightWhite", color)} ${paint(
+    "Σ",
+    "dim",
     color,
-  )} ${paint("Σ", "dim", color)} ${paint(`${total}`, "brightWhite", color)}`;
+  )} ${paint(`${total}`, "brightWhite", color)}`;
 
   const live = liveClassCounts(index.sessions, nowMs, excludeSessionId);
   if (live.length === 0) return [countCell];
 
-  const liveLabel = paint("active", "dim", color);
-  const liveCells = live
+  const rosterCell = live
     .map(
       (c) =>
         `${paint("●", "green", color)} ${paint(`${c.cls} ${c.count}`, "brightWhite", color)}`,
     )
     .join(" ");
-  return [countCell, `${liveLabel} ${liveCells}`];
+  return [countCell, rosterCell];
 }
 
-export interface MonthlySpend {
-  active: string;
-  total: string;
-}
-
-// The active class's accumulated spend this month and the month Σ total, as two
-// cost-forward spend-row cells (`<label> $<cost> <tokens>`): the dim label, the
-// bright cost, the dim i|c|o trail (ADR-0005). The active cell is labelled with the neutral
-// self-tag (`mdl`); Σ counts every class including ones not shown individually. A
-// zero for the active class is meaningful (nothing spent on it yet this month),
-// so it renders `mdl $0.00 0` rather than being omitted.
+// The month Σ ledger cell for the spend row (ADR-0006): `Σ $<total> mo`, painted
+// wholly dim — the accumulated month total recedes below the live `ses`/burn/
+// cache figures, since brightness encodes "what is moving". The per-class `mdl`
+// cost cell was dropped: the month total is the one accumulated figure worth a
+// glance, and the current row already names the active model.
 export function renderMonthly(
   indexPath: string,
-  activeClass: string,
   month: string,
   color: boolean,
-): MonthlySpend {
+): string {
   const spend = monthClassSpend(indexPath, month);
-  // Look up by the real class; render under the neutral self-tag (the current
-  // row already names the model). A Σ over every class follows.
-  const active = spend.byClass[activeClass] ?? {
-    tokens: sumUsage({}),
-    costUsd: 0,
-  };
-
-  return {
-    active: costForward(
-      SELF_LABEL,
-      active.costUsd,
-      color,
-      tokenTrail(active.tokens),
-    ),
-    total: costForward(
-      "Σ",
-      spend.total.costUsd,
-      color,
-      tokenTrail(spend.total.tokens),
-    ),
-  };
+  return paint(`Σ ${formatUsd(spend.total.costUsd)} mo`, "dim", color);
 }
 
-// One cost-forward spend cell: dim label · bright `$cost`, then dim tokens when
-// known. Omitting `tokens` yields the cost-only cell — the live, not-yet-indexed
-// `ses` fallback never prints a 0-token count, so there is no trailing tokens
-// segment (and no trailing space).
-export function costForward(
-  label: string,
+// The live session spend cell: dim `ses` · bright `$cost`, then — when a burn
+// rate is known (a positive duration) — an accent `↑`, the bright `$rate`, and a
+// dim `/hr`. The token trail is gone (ADR-0006); the cache-read share now carries
+// the efficiency signal in its own cell. Live figures are bright; the `/hr` unit
+// recedes.
+export function sesCell(
   costUsd: number,
+  durationMs: number | undefined,
   color: boolean,
-  tokens?: string,
 ): string {
-  const cell = `${paint(label, "dim", color)} ${paint(
+  const cell = `${paint("ses", "dim", color)} ${paint(
     formatUsd(costUsd),
     "brightWhite",
     color,
   )}`;
-  return tokens === undefined ? cell : `${cell} ${paint(tokens, "dim", color)}`;
+  const rate =
+    durationMs === undefined ? undefined : burnRate(costUsd, durationMs);
+  if (rate === undefined) return cell;
+  return `${cell} ${paint("↑", "accent", color)}${paint(
+    formatUsd(rate),
+    "brightWhite",
+    color,
+  )}${paint("/hr", "dim", color)}`;
+}
+
+// The cache-read-share cell: bright `<pct>%` · dim `cached` — the efficiency
+// signal that explains a low `ses` cost (agentic usage is cache-read-dominated,
+// and a cache read is far cheaper than fresh output). Callers omit the cell when
+// tokens are unknown, so it never prints a meaningless 0%.
+function cacheCell(pct: number, color: boolean): string {
+  return `${paint(`${pct}%`, "brightWhite", color)} ${paint(
+    "cached",
+    "dim",
+    color,
+  )}`;
 }
 
 interface SessionRef {
@@ -169,37 +153,38 @@ interface SessionRef {
   transcriptPath?: string;
 }
 
+interface SpendPair {
+  ses: string;
+  cache: string;
+}
+
 function renderSpend(
   index: CrossSessionIndex,
   sessionCostUsd: number | undefined,
+  durationMs: number | undefined,
   session: SessionRef,
   color: boolean,
-): string {
+): SpendPair {
   const totals = sessionTotals(
     index,
     session.sessionId,
     session.transcriptPath,
   );
-  // Cost-forward: dim `ses` · bright `$cost` · dim tokens. Absence in the store
-  // (not yet indexed this render) means cost-only; never print 0 tokens. With
-  // neither tokens nor a session cost the whole cell is omitted.
-  //
   // The two-cost-source rule (ADR-0004): when the session is in the store its
-  // pricing-table cost is authoritative (the branch below); only the not-yet-
-  // indexed live session falls back to the payload's `cost.total_cost_usd`.
+  // pricing-table cost is authoritative (the branch below), and its own tokens
+  // yield the cache% cell; only the not-yet-indexed live session falls back to
+  // the payload's `cost.total_cost_usd`, which carries no tokens (no cache cell).
   if (totals !== undefined) {
-    return costForward(
-      "ses",
-      totals.costUsd,
-      color,
-      tokenTrail(sumUsage(totals.tokens)),
-    );
+    const share = cacheReadShare(sumUsage(totals.tokens));
+    return {
+      ses: sesCell(totals.costUsd, durationMs, color),
+      cache: share === undefined ? "" : cacheCell(share, color),
+    };
   }
-  // Live fallback: payload cost (ADR-0004), cost-only — omit tokens.
   if (sessionCostUsd !== undefined) {
-    return costForward("ses", sessionCostUsd, color);
+    return { ses: sesCell(sessionCostUsd, durationMs, color), cache: "" };
   }
-  return "";
+  return { ses: "", cache: "" };
 }
 
 export interface FleetCells {
@@ -209,26 +194,35 @@ export interface FleetCells {
 
 // The spend and fleet row cells (board section 1), already painted but WITHOUT
 // field separators — the line assembler joins them with the shared dot
-// separator. spendCells = the live session cell (omitted when neither tokens
-// nor a session cost is known), the active class's month spend, the Σ month
-// total. fleetCells come from the roster. The current session is threaded
-// through so the live `active` tally excludes it.
+// separator. spendCells = the live `ses` cell (with burn rate when a duration is
+// known; omitted when neither tokens nor a session cost is available), the
+// cache% cell (only when the session's tokens are known), and the dim Σ month
+// ledger. fleetCells come from the roster. The current session is threaded
+// through so the live roster tally excludes it.
 export function renderFleet(
   index: CrossSessionIndex,
   indexPath: string,
   currentClass: string,
   sessionCostUsd: number | undefined,
+  durationMs: number | undefined,
   month: string,
   nowMs: number,
   color: boolean,
   session: SessionRef = {},
 ): FleetCells {
-  const monthly = renderMonthly(indexPath, currentClass, month, color);
-  const sesCell = renderSpend(index, sessionCostUsd, session, color);
+  const total = renderMonthly(indexPath, month, color);
+  const { ses, cache } = renderSpend(
+    index,
+    sessionCostUsd,
+    durationMs,
+    session,
+    color,
+  );
 
   const spendCells: string[] = [];
-  if (sesCell !== "") spendCells.push(sesCell);
-  spendCells.push(monthly.active, monthly.total);
+  if (ses !== "") spendCells.push(ses);
+  if (cache !== "") spendCells.push(cache);
+  spendCells.push(total);
 
   return {
     spendCells,
