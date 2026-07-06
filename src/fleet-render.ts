@@ -160,14 +160,24 @@ function cacheCell(pct: number, color: boolean): string {
   )}`;
 }
 
+// The one-line HUD's compact cache cell: bright `<pct>%` · dim `c`. The HUD is
+// width-bound, so it trades the `cached` word for a single-letter suffix (`96%c`);
+// the roomier block layout keeps the spelled-out `cacheCell` above.
+function cacheCellCompact(pct: number, color: boolean): string {
+  return `${paint(`${pct}%`, "brightWhite", color)}${paint("c", "dim", color)}`;
+}
+
 interface SessionRef {
   sessionId?: string;
   transcriptPath?: string;
 }
 
+// renderSpend returns the raw cache-read share (not a formatted cell) so each
+// layout can spell it its own way: the block layout uses `cacheCell` (`96% cached`),
+// the HUD uses `cacheCellCompact` (`96%c`). undefined when tokens are unknown.
 interface SpendPair {
   ses: string;
-  cache: string;
+  share: number | undefined;
 }
 
 function renderSpend(
@@ -187,16 +197,18 @@ function renderSpend(
   // yield the cache% cell; only the not-yet-indexed live session falls back to
   // the payload's `cost.total_cost_usd`, which carries no tokens (no cache cell).
   if (totals !== undefined) {
-    const share = cacheReadShare(sumUsage(totals.tokens));
     return {
       ses: sesCell(totals.costUsd, durationMs, color),
-      cache: share === undefined ? "" : cacheCell(share, color),
+      share: cacheReadShare(sumUsage(totals.tokens)),
     };
   }
   if (sessionCostUsd !== undefined) {
-    return { ses: sesCell(sessionCostUsd, durationMs, color), cache: "" };
+    return {
+      ses: sesCell(sessionCostUsd, durationMs, color),
+      share: undefined,
+    };
   }
-  return { ses: "", cache: "" };
+  return { ses: "", share: undefined };
 }
 
 export interface FleetCells {
@@ -223,7 +235,7 @@ export function renderFleet(
   session: SessionRef = {},
 ): FleetCells {
   const total = renderMonthly(indexPath, month, color);
-  const { ses, cache } = renderSpend(
+  const { ses, share } = renderSpend(
     index,
     sessionCostUsd,
     durationMs,
@@ -233,7 +245,7 @@ export function renderFleet(
 
   const spendCells: string[] = [];
   if (ses !== "") spendCells.push(ses);
-  if (cache !== "") spendCells.push(cache);
+  if (share !== undefined) spendCells.push(cacheCell(share, color));
   spendCells.push(total);
 
   return {
@@ -266,7 +278,7 @@ export function fleetLineSegments(
   session: SessionRef = {},
 ): { spend: LineSegment[]; fleet: LineSegment[] } {
   const total = renderMonthly(indexPath, month, color);
-  const { ses, cache } = renderSpend(
+  const { ses, share } = renderSpend(
     index,
     sessionCostUsd,
     durationMs,
@@ -276,7 +288,8 @@ export function fleetLineSegments(
 
   const spend: LineSegment[] = [];
   if (ses !== "") spend.push({ text: ses });
-  if (cache !== "") spend.push({ text: cache, priority: 5 });
+  if (share !== undefined)
+    spend.push({ text: cacheCellCompact(share, color), priority: 5 });
   spend.push({ text: total, priority: 1 });
 
   const monthCounts = monthClassCounts(index.sessions, month);

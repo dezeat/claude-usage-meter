@@ -381,6 +381,8 @@ test("layout:line collapses the four rows into one line starting with the model"
   assert.ok(line.includes(" · "), "rows join with the dim dot");
   assert.ok(line.startsWith("opus 4.8"), "the line starts with the model");
   assert.ok(!/\bcurrent\b/.test(line), "the HUD drops the row labels");
+  assert.ok(line.includes("0%c"), "the HUD uses the compact %c cache form");
+  assert.ok(!line.includes("cached"), "the spelled-out 'cached' is block-only");
 });
 
 test("the default layout still renders the four labelled block rows", () => {
