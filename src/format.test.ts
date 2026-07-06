@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import { type ModelUsage } from "./aggregate.js";
 import {
+  burnRate,
   cacheReadShare,
   formatUsd,
   sumUsage,
@@ -49,6 +50,18 @@ test("a dollar figure renders as $d.dd — two fixed decimals, no separator (han
   assert.strictEqual(formatUsd(3.4), "$3.40");
   assert.strictEqual(formatUsd(0), "$0.00");
   assert.strictEqual(formatUsd(1234.5), "$1234.50");
+});
+
+test("the burn rate is spend divided by elapsed hours (dollars per hour)", () => {
+  // 0.5 h: $3.45 / 0.5 h = $6.90/hr.
+  assert.ok(Math.abs((burnRate(3.45, 1_800_000) ?? NaN) - 6.9) < 1e-9);
+  // Exactly 1 h leaves the rate equal to the spend.
+  assert.strictEqual(burnRate(10, 3_600_000), 10);
+});
+
+test("the burn rate is undefined for a zero or negative duration, so callers omit a meaningless rate", () => {
+  assert.strictEqual(burnRate(5, 0), undefined);
+  assert.strictEqual(burnRate(5, -1), undefined);
 });
 
 test("summing a per-model token map adds each of the four kinds independently", () => {

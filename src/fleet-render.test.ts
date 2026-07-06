@@ -111,14 +111,15 @@ const FLEET_INDEX = makeIndex(
 
 const FLEET_MONTH = new Date(NOW_MS).toISOString().slice(0, 7);
 
-test("an all-idle fleet renders the count cell as <class> <monthCount> Σ <monthTotal> with no active cell", () => {
+test("an all-idle fleet renders the count cell as <monthCount> Σ <monthTotal> with no roster cell", () => {
   const cells = renderRoster(FLEET_INDEX, "opus", FLEET_MONTH, NOW_MS, false);
-  assert.deepStrictEqual(cells, ["mdl 2 Σ 4"]);
+  assert.deepStrictEqual(cells, ["2 Σ 4"]);
 });
 
 test("the count cell joins the active-class month count and the month total with a Σ connective, never a slash", () => {
   const cells = renderRoster(FLEET_INDEX, "opus", FLEET_MONTH, NOW_MS, false);
-  assert.strictEqual(cells[0], "mdl 2 Σ 4");
+  assert.strictEqual(cells[0], "2 Σ 4");
+  assert.ok(!cells[0]?.includes("mdl"), "the mdl self-tag is dropped");
   assert.ok(!cells[0]?.includes("mo"), "the mo qualifier is dropped");
   assert.ok(!cells[0]?.includes("/"), "the cell uses ' Σ ', never a slash");
   assert.ok(!cells[0]?.includes("·"), "the cell uses Σ, not a middle dot");
@@ -133,7 +134,7 @@ test("with colour the count cell dims the Σ connective like the spend row while
     true,
   );
   assert.ok(countCell !== undefined);
-  assert.ok(countCell.includes(`${DIM}mdl`), "the self-tag is dim");
+  assert.ok(!countCell.includes("mdl"), "no self-tag on the count cell");
   assert.ok(
     countCell.includes(`${DIM}Σ`),
     "the Σ connective is dim, matching the spend-row Σ",
@@ -152,6 +153,7 @@ test("the monthly spend cells are cost-forward with Σ, no % and no bar glyphs",
     EMPTY_INDEX_PATH,
     "opus",
     2.14,
+    undefined,
     month,
     NOW_MS,
     false,
@@ -172,6 +174,7 @@ test("the spend and fleet cells emit no green-on-bar, yellow, or red SGR codes",
     EMPTY_INDEX_PATH,
     "opus",
     2.14,
+    undefined,
     month,
     NOW_MS,
     true,
@@ -233,7 +236,7 @@ function makeIndexWithSession(
   };
 }
 
-test("the spend cell is cost-forward: $cost before the session tokens", () => {
+test("the spend cells lead with the live ses cost and burn, then the session's cache% cell", () => {
   const index = makeIndexWithSession(
     "abc",
     "/t/abc.jsonl",
@@ -248,20 +251,28 @@ test("the spend cell is cost-forward: $cost before the session tokens", () => {
     2.14,
   );
   const month = new Date(NOW_MS).toISOString().slice(0, 7);
+  // A 1-hour duration makes the burn the cost itself: $2.14/(3.6e6/3.6e6) = $2.14/hr.
   const { spendCells } = renderFleet(
     index,
     EMPTY_INDEX_PATH,
     "opus",
     2.14,
+    3_600_000,
     month,
     NOW_MS,
     false,
     { sessionId: "abc" },
   );
-  assert.strictEqual(spendCells[0], "ses $2.14 i:600.0k|c:100.0k|o:500.0k");
+  assert.strictEqual(spendCells[0], "ses $2.14 ↑$2.14/hr");
+  // 100k cache reads of 1.2M total tokens → an 8% cache signal.
+  assert.strictEqual(spendCells[1], "8% cached");
+  assert.ok(
+    !spendCells[0]?.includes("i:"),
+    "no raw token trail on the ses cell",
+  );
 });
 
-test("when the session is not in the store the spend cell falls back to cost only", () => {
+test("when the session is not in the store the spend cell falls back to cost only, no cache cell", () => {
   const index = makeIndexWithSession("abc", "/t/abc.jsonl", {}, 2.14);
   const month = new Date(NOW_MS).toISOString().slice(0, 7);
   const { spendCells } = renderFleet(
@@ -269,12 +280,17 @@ test("when the session is not in the store the spend cell falls back to cost onl
     EMPTY_INDEX_PATH,
     "opus",
     1.07,
+    undefined,
     month,
     NOW_MS,
     false,
     { sessionId: "not-indexed-yet" },
   );
   assert.strictEqual(spendCells[0], "ses $1.07");
+  assert.ok(
+    !spendCells.some((c) => c.includes("cached")),
+    "no cache cell without session tokens",
+  );
   assert.ok(
     !spendCells[0]?.includes(" 0"),
     "must not print a 0-token spend cell",
@@ -356,7 +372,7 @@ test("the count cell is the active-class month count Σ month total, plus an act
     JUN_NOW_MS,
     false,
   );
-  assert.deepStrictEqual(cells, ["mdl 2 Σ 3", "active ● opus 1 ● sonnet 1"]);
+  assert.deepStrictEqual(cells, ["2 Σ 3", "● opus 1 ● sonnet 1"]);
 });
 
 test("a fresh single-session fixture renders the month count, never an all-time total", () => {
@@ -365,7 +381,7 @@ test("a fresh single-session fixture renders the month count, never an all-time 
     0,
   );
   const cells = renderRoster(single, "opus", JUN_MONTH, JUN_NOW_MS, false);
-  assert.deepStrictEqual(cells, ["mdl 1 Σ 1"]);
+  assert.deepStrictEqual(cells, ["1 Σ 1"]);
 
   const priorMonthOnly = makeIndex(
     [{ modelClass: "opus", lastTs: MAY_TS, costUsd: 1.0 }],
@@ -380,7 +396,7 @@ test("a fresh single-session fixture renders the month count, never an all-time 
   );
   assert.deepStrictEqual(
     emptyCells,
-    ["mdl 0 Σ 0"],
+    ["0 Σ 0"],
     "a session only in a prior month leaves the current month empty",
   );
 });
@@ -402,7 +418,7 @@ test("the live active tally self-excludes the current session", () => {
     false,
     "session-0",
   );
-  assert.deepStrictEqual(cells, ["mdl 2 Σ 2", "active ● opus 1"]);
+  assert.deepStrictEqual(cells, ["2 Σ 2", "● opus 1"]);
 });
 
 test("the active cell is dropped when the current session is the only live one", () => {
@@ -418,7 +434,7 @@ test("the active cell is dropped when the current session is the only live one",
     false,
     "session-0",
   );
-  assert.deepStrictEqual(cells, ["mdl 1 Σ 1"]);
+  assert.deepStrictEqual(cells, ["1 Σ 1"]);
 });
 
 test("live count includes only sessions within the liveness window, grouped per class", () => {
@@ -508,34 +524,29 @@ const SPEND_SESSIONS = [
   },
 ];
 
-test("the active class's monthly cell is cost-forward labelled by class; Σ sums all classes", async () => {
+test("renderMonthly returns only the dim Σ month total — no per-class mdl cell, no token trail", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
-  const { active, total } = renderMonthly(dbPath, "opus", SPEND_MONTH, false);
-  assert.strictEqual(active, "mdl $5.00 i:1.0M|c:0|o:0");
-  assert.strictEqual(total, "Σ $11.00 i:3.0M|c:0|o:0");
+  const cell = renderMonthly(dbPath, SPEND_MONTH, false);
+  assert.strictEqual(cell, "Σ $11.00 mo");
+  assert.ok(!cell.includes("mdl"), "the per-class mdl cost cell is dropped");
+  assert.ok(!cell.includes("i:"), "the token trail is dropped from the ledger");
 });
 
-test("the Σ total reflects all classes even when the active class is the smaller one", async () => {
+test("the Σ month total sums every class and carries no percentage", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
-  const { active, total } = renderMonthly(dbPath, "sonnet", SPEND_MONTH, false);
-  assert.strictEqual(active, "mdl $6.00 i:2.0M|c:0|o:0");
-  assert.strictEqual(total, "Σ $11.00 i:3.0M|c:0|o:0");
+  const cell = renderMonthly(dbPath, SPEND_MONTH, false);
+  assert.strictEqual(cell, "Σ $11.00 mo", "$5.00 opus + $6.00 sonnet");
+  assert.ok(!cell.includes("%"), "no percentage on the ledger cell");
 });
 
-test("an active class with no sessions this month renders <class> $0.00 0 while Σ reflects others", async () => {
+test("a month with no indexed sessions renders a dim Σ $0.00 mo ledger", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
-  const { active, total } = renderMonthly(dbPath, "haiku", SPEND_MONTH, false);
-  assert.strictEqual(active, "mdl $0.00 0");
-  assert.strictEqual(total, "Σ $11.00 i:3.0M|c:0|o:0");
+  const cell = renderMonthly(dbPath, "2026-01", false);
+  assert.strictEqual(cell, "Σ $0.00 mo");
 });
 
-test("the cost is bright while the label and tokens are dim on both monthly cells", async () => {
+test("the whole Σ ledger cell is dim so the accumulated total recedes below the live figures", async () => {
   const dbPath = await buildSpendDb(SPEND_SESSIONS);
-  const { active, total } = renderMonthly(dbPath, "opus", SPEND_MONTH, true);
-  assert.ok(active.includes(`${DIM}mdl${ESC}[0m`), "the mdl self-tag is dim");
-  assert.ok(
-    active.includes(`${BRIGHT}$5.00${ESC}[0m`),
-    "the active cost is bright",
-  );
-  assert.ok(total.includes(`${BRIGHT}$11.00${ESC}[0m`), "the Σ cost is bright");
+  const cell = renderMonthly(dbPath, SPEND_MONTH, true);
+  assert.strictEqual(cell, `${DIM}Σ $11.00 mo${ESC}[0m`);
 });

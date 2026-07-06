@@ -66,3 +66,11 @@ export function cacheReadShare(usage) {
         return undefined;
     return Math.round((usage.cacheReadTokens / total) * 100);
 }
+// Live spend rate in dollars per hour. Returns undefined when the duration is
+// zero, absent, or non-finite: with no elapsed time the rate is meaningless
+// (a divide-by-zero Infinity), so callers omit the cue rather than print it.
+export function burnRate(costUsd, durationMs) {
+    if (!Number.isFinite(durationMs) || durationMs <= 0)
+        return undefined;
+    return costUsd / (durationMs / 3_600_000);
+}

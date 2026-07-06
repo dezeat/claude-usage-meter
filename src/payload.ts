@@ -8,6 +8,7 @@ export interface ParsedPayload {
   modelName?: string;
   contextPercentage?: number;
   costUsd?: number;
+  durationMs?: number;
   fiveHour?: RateWindow;
   sevenDay?: RateWindow;
   sessionId?: string;
@@ -55,6 +56,7 @@ export function parsePayload(value: unknown): ParsedPayload {
     // indexed session — the `ses` fallback in render/fleet-render. Everything
     // persisted is priced from tokens in index-store, not this field.
     costUsd: cost ? asNumber(cost.total_cost_usd) : undefined,
+    durationMs: cost ? asNumber(cost.total_duration_ms) : undefined,
     fiveHour: limits ? parseWindow(limits.five_hour) : undefined,
     sevenDay: limits ? parseWindow(limits.seven_day) : undefined,
     sessionId: asString(root.session_id),
