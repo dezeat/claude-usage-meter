@@ -67,6 +67,16 @@ function rosterCell(live, color) {
         .map((c) => `${paint("●", "green", color)} ${paint(`${c.cls} ${c.count}`, "brightWhite", color)}`)
         .join(" ");
 }
+// The HUD's compact roster: `●<c>(<n>)` per live class — the width-bound one-line
+// layout abbreviates each class to its initial (opus→o, fable→f, sonnet→s,
+// haiku→h) with the count in parens (so a two-digit count stays unambiguous). The
+// roomier block layout spells the class out via `rosterCell`. Distinct initials
+// across the current classes make the single letter unambiguous.
+function rosterCellCompact(live, color) {
+    return live
+        .map((c) => `${paint("●", "green", color)}${paint(`${c.cls.charAt(0)}(${c.count})`, "brightWhite", color)}`)
+        .join(" ");
+}
 export function renderRoster(index, currentClass, month, nowMs, color, excludeSessionId) {
     const monthCounts = monthClassCounts(index.sessions, month);
     const count = countCell(monthCounts, currentClass, color);
@@ -172,7 +182,7 @@ export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd
     if (live.length > 0) {
         const liveTotal = live.reduce((sum, c) => sum + c.count, 0);
         fleet.push({
-            text: rosterCell(live, color),
+            text: rosterCellCompact(live, color),
             reduced: `${paint("●", "green", color)}${paint(`${liveTotal}`, "brightWhite", color)}`,
             priority: 6,
         });

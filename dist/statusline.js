@@ -14,10 +14,11 @@ function colorEnabled() {
     return flag === undefined || flag === "";
 }
 // ADR-0007 presentation toggles, read at the edge exactly like NO_COLOR. An
-// unrecognized value degrades to the product default (line + bar); the pure
-// renderer never sees an env var. The product default layout is `line`.
+// unrecognized value degrades to the product default (block + bar); the pure
+// renderer never sees an env var. The product default layout is `block` (the
+// four stacked rows); `line` is the opt-in single-line HUD.
 function layoutMode() {
-    return process.env.USAGE_METER_LAYOUT === "block" ? "block" : "line";
+    return process.env.USAGE_METER_LAYOUT === "line" ? "line" : "block";
 }
 function meterMode() {
     return process.env.USAGE_METER_METERS === "pill" ? "pill" : "bar";
