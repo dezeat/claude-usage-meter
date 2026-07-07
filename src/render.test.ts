@@ -196,28 +196,31 @@ test("an absent resolved window falls back to the payload's own snapshot", () =>
   assert.match(limits, /7d .* 68%/, "absent 7d falls back to the payload");
 });
 
-test("the spend row is cost-forward with the mdl self-label and Σ labels", () => {
+test("the spend row leads with the live ses cost and burn, a cache% cell, then a dim Σ ledger", () => {
   const spend = fullRender(false).split("\n")[2] ?? "";
-  assert.match(spend, /ses \$3\.45 i:1\.0M\|c:0\|o:200\.0k/);
-  assert.match(spend, /mdl \$/);
-  assert.match(spend, /Σ \$/);
+  // ses $3.45 with a 1380000ms duration burns 3.45/(1380000/3.6e6) = $9.00/hr.
+  assert.match(spend, /ses \$3\.45 ↑\$9\.00\/hr/);
+  // The session's 1.2M tokens carry zero cache reads → a 0% cache signal.
+  assert.match(spend, /0% cached/);
+  assert.match(spend, /Σ \$0\.00 mo/);
+  assert.ok(!spend.includes("mdl "), "the per-class mdl cost cell is dropped");
+  assert.ok(!spend.includes("i:"), "the raw token trail is dropped from ses");
 });
 
-test("the fleet row leads with the mdl self-label count Σ total, no mo, plus active", () => {
+test("the fleet row leads with the count Σ total — no mdl tag, no mo, no active word", () => {
   const fleet = fullRender(false).split("\n")[3] ?? "";
-  assert.match(fleet, /mdl 1 Σ 1/);
+  assert.match(fleet, /^fleet {4}1 Σ 1/);
+  assert.ok(!fleet.includes("mdl"), "the mdl self-tag is dropped");
   assert.ok(!fleet.includes("mo"), "the mo qualifier is dropped");
   assert.ok(!fleet.includes("/"), "the count cell uses ' Σ ', never a slash");
-  // The current session is the only live opus → the active cell is omitted.
-  assert.ok(
-    !fleet.includes("active"),
-    "self-only live tally drops active cell",
-  );
+  assert.ok(!fleet.includes("active"), "the active word is dropped");
+  // The current session is the only live opus → the roster cell is omitted.
+  assert.ok(!fleet.includes("●"), "self-only live tally drops the roster cell");
 });
 
 test("multi-field rows join with a dot separator, none dangling", () => {
   const rows = fullRender(false).split("\n");
-  // limits (ctx · 5h · 7d) and spend (ses · mdl · Σ) carry separators; the
+  // limits (ctx · 5h · 7d) and spend (ses · cache · Σ) carry separators; the
   // current row is a single model cell and the fleet row a single count cell.
   assert.ok((rows[1] ?? "").includes(" · "), "limits joins its fields");
   assert.ok((rows[2] ?? "").includes(" · "), "spend joins its fields");
@@ -240,7 +243,7 @@ test("fewer limit fields mean fewer separators with no dangling dot", () => {
   assert.ok(!limits.endsWith(" · "));
 });
 
-test("the cost is painted brightWhite ahead of its tokens in the spend row", () => {
+test("the live session cost is painted brightWhite in the spend row", () => {
   const spend = fullRender(true).split("\n")[2] ?? "";
   assert.ok(
     spend.includes(`${ANSI.brightWhite}$3.45${ANSI.reset}`),
@@ -279,8 +282,8 @@ test("with no index the fleet and spend-fleet segments are omitted", () => {
     color: false,
   });
   assert.ok(!noIndex.includes("\nfleet"), "no fleet row without an index");
-  // The only spend content without an index is the raw payload cost, never the
-  // active-class or Σ figures, which are index-derived.
+  // Without an index the spend row is the live ses cost (plus burn), never the
+  // cache% or Σ figures, which are index-derived.
   assert.ok(!noIndex.includes("Σ"), "no Σ total without an index");
   assert.ok(!noIndex.includes("·1 mo"), "no fleet counts without an index");
 });
@@ -325,3 +328,82 @@ test("row labels are painted accent", () => {
     );
   }
 });
+
+test("meters:pill renders the limit as a bracket chip with no bar glyphs, ctx included", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    meters: "pill",
+    limits: {
+      fiveHour: {
+        usedPercentage: 85,
+        resetsAt: promax.rate_limits.five_hour.resets_at,
+      },
+    },
+  });
+  const limits = line.split("\n")[1] ?? "";
+  assert.match(
+    limits,
+    /5h \[85%\]/,
+    "the pill is the bracket fallback under NO_COLOR",
+  );
+  assert.match(limits, /ctx \[24%\]/, "ctx becomes a pill too");
+  assert.ok(!limits.includes("▓"), "no filled bar glyphs in pill mode");
+  assert.ok(!limits.includes("░"), "no empty bar glyphs in pill mode");
+  // The reset countdown is unchanged — it still trails the 5h/7d chips.
+  assert.match(limits, /5h \[85%\] ⟳ 2h/, "the reset trail survives the pill");
+});
+
+test("meters:bar (default) leaves the limits row byte-for-byte unchanged", () => {
+  const withDefault = fullRender(false).split("\n")[1];
+  const explicitBar =
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: false,
+      meters: "bar",
+      index: populatedIndex(),
+      indexPath: ":memory:",
+    }).split("\n")[1] ?? "";
+  assert.equal(explicitBar, withDefault, "bar is the untouched default look");
+  assert.ok(
+    explicitBar.includes("▓"),
+    "the bar glyphs are present in bar mode",
+  );
+});
+
+test("layout:line collapses the four rows into one line starting with the model", () => {
+  const line = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    layout: "line",
+    index: populatedIndex(),
+    indexPath: ":memory:",
+    columns: 200,
+  });
+  assert.ok(!line.includes("\n"), "the HUD is a single physical line");
+  assert.ok(line.includes(" · "), "rows join with the dim dot");
+  assert.ok(line.startsWith("opus 4.8"), "the line starts with the model");
+  assert.ok(!/\bcurrent\b/.test(line), "the HUD drops the row labels");
+  assert.ok(line.includes("0%c"), "the HUD uses the compact %c cache form");
+  assert.ok(!line.includes("cached"), "the spelled-out 'cached' is block-only");
+});
+
+test("the default layout still renders the four labelled block rows", () => {
+  const rows = fullRender(false).split("\n");
+  assert.equal(rows.length, 4, "the block layout is the in-renderLine default");
+  assert.match(rows[0] ?? "", /^current /);
+});
+
+for (const columns of [80, 60, 40, 20, 8]) {
+  test(`layout:line never emits a line wider than columns=${columns}`, () => {
+    const line = renderLine(parsePayload(promax), fixtureNow, {
+      color: true,
+      layout: "line",
+      index: populatedIndex(),
+      indexPath: ":memory:",
+      columns,
+    });
+    assert.ok(!line.includes("\n"), "still a single line");
+    assert.ok(
+      visibleLength(line) <= columns,
+      `visible width ${visibleLength(line)} exceeds ${columns}`,
+    );
+  });
+}

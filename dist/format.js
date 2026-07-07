@@ -41,18 +41,6 @@ export function tokenBreakdown(usage) {
         ` · cache ${humanTokens(usage.cacheReadTokens)} r` +
         ` / ${humanTokens(usage.cacheCreationTokens)} w`);
 }
-// The spend-row token trail (ADR-0005): `i:<n>|c:<n>|o:<n>` — c is cache reads
-// ONLY; cache creation folds into i (fresh input work billed above the base
-// rate, not cached savings), so i+c+o equals the four-way total. An all-zero
-// usage keeps the single "0" cell (a meaningful zero) instead of i:0|c:0|o:0.
-export function tokenTrail(usage) {
-    const i = usage.inputTokens + usage.cacheCreationTokens;
-    const c = usage.cacheReadTokens;
-    const o = usage.outputTokens;
-    if (i + c + o === 0)
-        return "0";
-    return `i:${humanTokens(i)}|c:${humanTokens(c)}|o:${humanTokens(o)}`;
-}
 // The cache-read share of all tokens, rounded to a whole percent — the single
 // cue that explains a surprisingly-low cost ("96% cache reads"). Returns
 // undefined when there are no tokens, so callers omit the cue rather than
@@ -65,4 +53,16 @@ export function cacheReadShare(usage) {
     if (total === 0)
         return undefined;
     return Math.round((usage.cacheReadTokens / total) * 100);
+}
+// Live spend rate in dollars per hour. Returns undefined when the rate would be
+// noise rather than signal: a zero/absent/non-finite duration (no elapsed time →
+// a divide-by-zero Infinity), OR a non-positive cost — a `↑$0.00/hr` cue tells
+// the user nothing and fires for any $0 session, e.g. one on an unknown model
+// that prices to $0. Callers omit the cue rather than print it.
+export function burnRate(costUsd, durationMs) {
+    if (!Number.isFinite(durationMs) || durationMs <= 0)
+        return undefined;
+    if (costUsd <= 0)
+        return undefined;
+    return costUsd / (durationMs / 3_600_000);
 }

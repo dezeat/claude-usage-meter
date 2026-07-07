@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 
 import { type ModelUsage } from "./aggregate.js";
 import {
+  burnRate,
   cacheReadShare,
   formatUsd,
   sumUsage,
   tokenBreakdown,
-  tokenTrail,
 } from "./format.js";
 
 // Synthetic fixture mirroring the cache-read-dominated agentic profile from the
@@ -51,6 +51,25 @@ test("a dollar figure renders as $d.dd — two fixed decimals, no separator (han
   assert.strictEqual(formatUsd(1234.5), "$1234.50");
 });
 
+test("the burn rate is spend divided by elapsed hours (dollars per hour)", () => {
+  // 0.5 h: $3.45 / 0.5 h = $6.90/hr.
+  assert.ok(Math.abs((burnRate(3.45, 1_800_000) ?? NaN) - 6.9) < 1e-9);
+  // Exactly 1 h leaves the rate equal to the spend.
+  assert.strictEqual(burnRate(10, 3_600_000), 10);
+});
+
+test("the burn rate is undefined for a zero or negative duration, so callers omit a meaningless rate", () => {
+  assert.strictEqual(burnRate(5, 0), undefined);
+  assert.strictEqual(burnRate(5, -1), undefined);
+});
+
+test("the burn rate is undefined for a zero cost, so a $0 session omits a noise ↑$0.00/hr", () => {
+  // A session on an unknown model prices to $0 yet has a real duration; the rate
+  // is $0.00/hr — signal-free, so it is omitted like the zero-duration case.
+  assert.strictEqual(burnRate(0, 1_800_000), undefined);
+  assert.strictEqual(burnRate(-1, 1_800_000), undefined);
+});
+
 test("summing a per-model token map adds each of the four kinds independently", () => {
   // Two models whose four kinds sum to the PROFILE totals above:
   //   a: in 8_000  out 3_000  cacheRead 600_000  cacheCreate 13_000
@@ -70,32 +89,4 @@ test("summing a per-model token map adds each of the four kinds independently", 
     },
   };
   assert.deepStrictEqual(sumUsage(perModel), PROFILE);
-});
-
-test("the spend trail folds cache writes into i and keeps c as cache reads only (ADR-0005)", () => {
-  // PROFILE hand-computed: i = 12_000 input + 23_000 cacheCreate = 35_000;
-  // c = 960_000 cache reads; o = 5_000 output.
-  assert.strictEqual(tokenTrail(PROFILE), "i:35.0k|c:960.0k|o:5.0k");
-});
-
-test("the spend trail's three segments sum to the four-way total", () => {
-  // Small exact numbers so humanTokens is the identity: 3+1 | 4 | 2 = 10,
-  // the same total the four kinds sum to.
-  const usage: ModelUsage = {
-    inputTokens: 3,
-    outputTokens: 2,
-    cacheReadTokens: 4,
-    cacheCreationTokens: 1,
-  };
-  assert.strictEqual(tokenTrail(usage), "i:4|c:4|o:2");
-});
-
-test("an all-zero usage keeps the single 0 cell — never i:0|c:0|o:0 noise", () => {
-  const empty: ModelUsage = {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-  };
-  assert.strictEqual(tokenTrail(empty), "0");
 });
