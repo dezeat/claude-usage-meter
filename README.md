@@ -6,46 +6,54 @@
 
 A [Claude Code](https://code.claude.com) plugin that turns usage and cost into a
 **live statusline cockpit** — one glance shows the running model, where you're
-rooted, account limits, live spend, and every parallel session across your
-worktrees. **No network, no telemetry, zero runtime dependencies**: it reads only
-the statusline payload Claude Code pipes in on stdin and your local session
-transcripts under `~/.claude/projects`, and persists a cross-session index in the
-Node built-in `node:sqlite` — nothing ever leaves your machine.
+rooted, your account limits, live spend, and every parallel session across your
+worktrees.
+
+**No network, no telemetry, zero runtime dependencies.** Every figure is computed
+locally, from:
+
+- the statusline payload Claude Code pipes in on **stdin**;
+- your local session transcripts under `~/.claude/projects`;
+- a cross-session index persisted in the Node built-in **`node:sqlite`**.
+
+Nothing ever leaves your machine.
 
 ![claude-usage-meter statusline — the block layout: current, limits, spend and fleet rows with bar meters](assets/statusline.png)
 
-The default is a **four-row block**: **current** names the active model and where
-you're rooted, **limits** shows account usage as short pace bars, **spend** is
-cost-forward with a live burn rate, and **fleet** counts your cross-session
-sessions and names who else is live — every field and row-group separated by a dim
-`·`, each row label accent-coloured.
+The default look is a **four-row block**, each row a self-contained readout:
 
-Prefer one compact line instead? A single-line **HUD** is one env var away
-(`USAGE_METER_LAYOUT=line`, [Layout & meters](#layout--meters)). It folds the
-same fields onto **one line that never wraps**: it reads the terminal width from
-`COLUMNS` (fallback `80`) and sheds fields by a fixed priority until the line
-fits — the dim, static accumulators recede first (the `Σ` month ledger, then the
-session counts), then the reset/branch trails and the cache cell, and the live
-roster collapses to a bare `●N` last; the model, repo, `ctx` and live `ses` are
-load-bearing and never shed. So a narrow prompt degrades gracefully instead of
-spilling onto a second row. To stay compact it abbreviates the live roster to its
-initials (`●o(3)`) and the cache share to `96%c`. Renders of the HUD and the pill
-meters live in [`assets/`](assets/).
+- **current** — the active model and where you're rooted (repo · branch · worktree).
+- **limits** — context, 5-hour and 7-day account usage as short pace bars with
+  reset countdowns.
+- **spend** — cost-forward: this session's cost, a live burn rate, the cache-read
+  share, and the month total.
+- **fleet** — how many sessions you've run this month, and who else is live right
+  now.
 
-> Numbers are illustrative. Colour: **bright** = live / headline value, dim =
-> idle / accumulated / chrome (a dim `·` separates every field and row-group), a
-> green `●` marks a live session, bars run green → yellow → red by fill, and in
-> the `block` layout the row label is accent-coloured. Swap bars for reverse-video
-> severity **pills** with `USAGE_METER_METERS=pill` ([Layout & meters](#layout--meters)).
-> `NO_COLOR` is honoured — every glyph and the layout survive, only the hue layer
-> is dropped; a pill degrades to bracketed text (`[85%]`) so its value and shape
-> outlive the colour.
+Fields and row-groups are separated by a dim `·`, and each row label is
+accent-coloured.
 
-It ships three views over the same local data: the **live statusline** above
-(redrawn on Claude Code's `refreshInterval`), an **after-task cost summary** — a
-per-model token and dollar breakdown printed when a task finishes (a `Stop` hook)
-— and an **off-session report**, a retrospective CLI dashboard across every
-project session.
+**Prefer one line?** A single-line **HUD** is one env var away
+(`USAGE_METER_LAYOUT=line`, [Layout & meters](#layout--meters)). It folds the same
+fields onto **one line that never wraps** — it reads the terminal width from
+`COLUMNS` and sheds low-priority fields by a fixed order until the line fits, so a
+narrow prompt degrades gracefully instead of spilling onto a second row. To stay
+compact it abbreviates (the roster to `●o(3)`, the cache share to `96%c`). Renders
+of the HUD and the pill meters live in [`assets/`](assets/).
+
+> **Reading the colours** — bright = live / headline value, dim = idle /
+> accumulated / chrome; a green `●` marks a live session; bars run green → yellow
+> → red by fill; in the `block` layout the row label is accent-coloured. `NO_COLOR`
+> is honoured — every glyph and the layout survive, only the hue is lost (a pill
+> degrades to bracketed text, `[85%]`). Numbers shown are illustrative.
+
+### Three views over the same local data
+
+- a **live statusline** (above), redrawn on Claude Code's `refreshInterval`;
+- an **after-task cost summary** — a per-model token and dollar breakdown printed
+  when a task finishes (a `Stop` hook);
+- an **off-session report** — a retrospective CLI dashboard across every project
+  session.
 
 **Why this and not [ccusage](https://github.com/ryoppippi/ccusage)?** ccusage is
 an excellent off-line CLI report; this is the complementary piece — a _live_
@@ -326,6 +334,31 @@ Costs come from a **hand-maintained pricing table** in
 `asOf` date; unknown ids are flagged and excluded rather than guessed. **Prices
 drift; PRs that update the table (and bump `asOf`) are welcome** — see
 [CONTRIBUTING](CONTRIBUTING.md).
+
+## Roadmap
+
+Work is tracked as issues on the
+[project board](https://github.com/dezeat/claude-usage-meter/issues). Everything
+below stays true to the core principle — **local-only, zero runtime deps, no
+network.**
+
+- **[Multi-layer drill-down analysis](https://github.com/dezeat/claude-usage-meter/issues/103)**
+  (epic) — pivot and drill the retained per-session data across time → project →
+  model → session → token-kind, with cost and cache-read efficiency at every
+  layer. Two presentations over one shared pure rollup engine
+  ([#104](https://github.com/dezeat/claude-usage-meter/issues/104)): a `--group-by`
+  **CLI tree** ([#105](https://github.com/dezeat/claude-usage-meter/issues/105))
+  and a **self-contained HTML dashboard** export
+  ([#106](https://github.com/dezeat/claude-usage-meter/issues/106)) — one portable
+  file, no served app.
+- **[Live burn-rate windowing](https://github.com/dezeat/claude-usage-meter/issues/101)**
+  — a true windowed spend rate and velocity sparklines, from a persisted sample
+  ring.
+- **[Leaner block/HUD internals](https://github.com/dezeat/claude-usage-meter/issues/102)**
+  — one segment builder per row, so the two layouts can't drift.
+
+Have an idea? Open an issue — and pricing PRs (update the table, bump `asOf`) are
+always welcome.
 
 ## Develop
 
