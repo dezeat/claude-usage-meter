@@ -7,7 +7,7 @@ import {
   monthOf,
   sessionTotals,
 } from "./index-store.js";
-import { type LineSegment } from "./layout.js";
+import { DROP, type LineSegment } from "./layout.js";
 
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
 
@@ -275,11 +275,11 @@ export function renderFleet(
   };
 }
 
-// The spend and fleet cells as HUD segments carrying their shed priorities
-// (ADR-0007 drop order): the dim Σ month ledger goes first (1), the count cell
-// second (2 — the live roster outlives it), the cache% cell fifth (5), and the
-// roster collapses to a bare `●<N>` last (6). The `ses` cell is load-bearing and
-// carries no priority. Same figures as renderFleet, tagged for the shedder.
+// The spend and fleet cells as HUD segments carrying their shed priorities from
+// the DROP table (ADR-0007): the dim Σ month ledger goes first, the count cell
+// next (the live roster outlives it), then the cache% cell, and the roster
+// collapses to a bare `●<N>` last. The `ses` cell is load-bearing and carries no
+// priority. Same figures as renderFleet, tagged for the shedder.
 export function fleetLineSegments(
   index: CrossSessionIndex,
   indexPath: string,
@@ -303,12 +303,12 @@ export function fleetLineSegments(
   const spend: LineSegment[] = [];
   if (ses !== "") spend.push({ text: ses });
   if (share !== undefined)
-    spend.push({ text: cacheCellCompact(share, color), priority: 5 });
-  spend.push({ text: total, priority: 1 });
+    spend.push({ text: cacheCellCompact(share, color), priority: DROP.CACHE });
+  spend.push({ text: total, priority: DROP.LEDGER });
 
   const monthCounts = monthClassCounts(index.sessions, month);
   const fleet: LineSegment[] = [
-    { text: countCell(monthCounts, currentClass, color), priority: 2 },
+    { text: countCell(monthCounts, currentClass, color), priority: DROP.COUNT },
   ];
   const live = liveClassCounts(index.sessions, nowMs, session.sessionId);
   if (live.length > 0) {
@@ -316,7 +316,7 @@ export function fleetLineSegments(
     fleet.push({
       text: rosterCellCompact(live, color),
       reduced: `${paint("●", "green", color)}${paint(`${liveTotal}`, "brightWhite", color)}`,
-      priority: 6,
+      priority: DROP.ROSTER,
     });
   }
 

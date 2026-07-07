@@ -53,12 +53,14 @@ for (const columns of [80, 60, 40, 20, 10, 3, 1]) {
   });
 }
 
-test("the drop order sheds the month ledger before the reset trails", () => {
-  // A width that forces exactly the first drop (Σ ledger, priority 1).
+test("the dim static month ledger sheds before the live reset trail (ADR-0007 order)", () => {
+  // ADR-0007's drop order recedes the dim, static accumulators first; the
+  // actionable reset countdown (a live "when am I unblocked" cue) outlives them.
+  // A width that forces exactly the first drop (Σ ledger, DROP.LEDGER).
   const wide = visibleLength(assembleLine(rows(), Infinity, false));
   const out = assembleLine(rows(), wide - 1, false);
-  assert.ok(!out.includes("Σ $12.00 mo"), "the month ledger goes first");
-  assert.ok(out.includes("⟳ 2h"), "the reset trail outlives the ledger");
+  assert.ok(!out.includes("Σ $12.00 mo"), "the dim month ledger sheds first");
+  assert.ok(out.includes("⟳ 2h"), "the live reset trail outlives the ledger");
 });
 
 test("the roster collapses to a bare ●N count rather than vanishing", () => {

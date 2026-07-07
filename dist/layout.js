@@ -1,4 +1,20 @@
 import { ANSI, paint, visibleLength } from "./ansi.js";
+// The fixed HUD shed order (ADR-0007), the single source of truth for every
+// segment's `priority` — lower sheds first. The principle: dim, static
+// accumulators recede before the live figures, and the actionable "when/where"
+// trails (reset countdown, branch) outlive the totals because they answer a
+// live question; the roster collapses to a bare count last. The load-bearing
+// cells (model, repo, ctx, ses) carry no priority and never shed. A new field
+// MUST claim a slot here rather than hard-coding an integer, so the order stays
+// in one place and can't silently invert (as it did before this table existed).
+export const DROP = {
+    LEDGER: 1, // dim `Σ $ mo` month total — the most expendable, static figure
+    COUNT: 2, // `<n> Σ <total>` month session count
+    RESET: 3, // `⟳ 2h` limit-reset countdown tail
+    BRANCH: 4, // `⎇ branch` / `⌂ worktree` location tail
+    CACHE: 5, // the cache-read `%c` cell
+    ROSTER: 6, // live roster → collapses to a bare `●N`
+};
 // A cold-open guard: a non-positive or non-finite width is "no limit", so the
 // HUD never sheds or truncates when COLUMNS is absent or nonsense.
 function widthOf(columns) {
