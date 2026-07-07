@@ -35,8 +35,15 @@ Binding constraints this records:
    degrades to the default; it never throws.
 2. **The `line` HUD must never wrap.** It reads terminal width from the `COLUMNS`
    env var (Claude Code sets it, v2.1.153+; fallback `80`) and sheds fields
-   against a fixed drop order — **trails → totals → labels** — until the line
-   fits.
+   against a fixed drop order until the line fits. The ordering principle: the
+   dim, static accumulators recede first (the month `Σ` ledger, then the session
+   count), then the cache-read cell, and the live roster collapses to a bare
+   `●N` last; the actionable **trails** — the reset countdown and the branch /
+   worktree tail — outlive the totals because they answer a live "when / where"
+   question. The load-bearing cells (the model, the repo name, `ctx`, and the
+   live `ses` spend) never shed; a hard truncate is the final backstop. The
+   single source of truth for the order is the `DROP` table in `src/layout.ts` —
+   a new HUD field MUST claim a slot there rather than hard-code an integer.
 3. **`pill` meters degrade under `NO_COLOR`.** Pills encode severity in the
    background color, so with color off they MUST render as bracketed text —
    `[85%]` — where the value and shape survive and only the color ramp is lost.
@@ -53,8 +60,8 @@ rows; the single-line HUD is one opt-in env var away.
 - The pure core gains two option fields and stays testable with fixed inputs; the
   edge owns the env reads.
 - The `line` layout carries a width budget and a drop order — a new field added
-  to the HUD must declare where it sits in that order, or it risks being the
-  first thing shed.
+  to the HUD must declare its slot in the `DROP` table (`src/layout.ts`), or it
+  risks being the first thing shed.
 - Rules out a config file for these toggles, and rules out a `pill` look that
   goes blank under `NO_COLOR`; changing either is a new ADR superseding this one.
 

@@ -1,7 +1,7 @@
 import { paint } from "./ansi.js";
 import { burnRate, cacheReadShare, formatUsd, sumUsage } from "./format.js";
 import { monthClassSpend, monthOf, sessionTotals, } from "./index-store.js";
-import {} from "./layout.js";
+import { DROP } from "./layout.js";
 export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
 function sortClassCounts(counts) {
     return Array.from(counts, ([cls, count]) => ({ cls, count })).sort((a, b) => {
@@ -160,11 +160,11 @@ export function renderFleet(index, indexPath, currentClass, sessionCostUsd, dura
         fleetCells: renderRoster(index, currentClass, month, nowMs, color, session.sessionId),
     };
 }
-// The spend and fleet cells as HUD segments carrying their shed priorities
-// (ADR-0007 drop order): the dim Σ month ledger goes first (1), the count cell
-// second (2 — the live roster outlives it), the cache% cell fifth (5), and the
-// roster collapses to a bare `●<N>` last (6). The `ses` cell is load-bearing and
-// carries no priority. Same figures as renderFleet, tagged for the shedder.
+// The spend and fleet cells as HUD segments carrying their shed priorities from
+// the DROP table (ADR-0007): the dim Σ month ledger goes first, the count cell
+// next (the live roster outlives it), then the cache% cell, and the roster
+// collapses to a bare `●<N>` last. The `ses` cell is load-bearing and carries no
+// priority. Same figures as renderFleet, tagged for the shedder.
 export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}) {
     const total = renderMonthly(indexPath, month, color);
     const { ses, share } = renderSpend(index, sessionCostUsd, durationMs, session, color);
@@ -172,11 +172,11 @@ export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd
     if (ses !== "")
         spend.push({ text: ses });
     if (share !== undefined)
-        spend.push({ text: cacheCellCompact(share, color), priority: 5 });
-    spend.push({ text: total, priority: 1 });
+        spend.push({ text: cacheCellCompact(share, color), priority: DROP.CACHE });
+    spend.push({ text: total, priority: DROP.LEDGER });
     const monthCounts = monthClassCounts(index.sessions, month);
     const fleet = [
-        { text: countCell(monthCounts, currentClass, color), priority: 2 },
+        { text: countCell(monthCounts, currentClass, color), priority: DROP.COUNT },
     ];
     const live = liveClassCounts(index.sessions, nowMs, session.sessionId);
     if (live.length > 0) {
@@ -184,7 +184,7 @@ export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd
         fleet.push({
             text: rosterCellCompact(live, color),
             reduced: `${paint("●", "green", color)}${paint(`${liveTotal}`, "brightWhite", color)}`,
-            priority: 6,
+            priority: DROP.ROSTER,
         });
     }
     return { spend, fleet };

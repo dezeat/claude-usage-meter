@@ -1,5 +1,22 @@
 import { ANSI, paint, visibleLength } from "./ansi.js";
 
+// The fixed HUD shed order (ADR-0007), the single source of truth for every
+// segment's `priority` — lower sheds first. The principle: dim, static
+// accumulators recede before the live figures, and the actionable "when/where"
+// trails (reset countdown, branch) outlive the totals because they answer a
+// live question; the roster collapses to a bare count last. The load-bearing
+// cells (model, repo, ctx, ses) carry no priority and never shed. A new field
+// MUST claim a slot here rather than hard-coding an integer, so the order stays
+// in one place and can't silently invert (as it did before this table existed).
+export const DROP = {
+  LEDGER: 1, // dim `Σ $ mo` month total — the most expendable, static figure
+  COUNT: 2, // `<n> Σ <total>` month session count
+  RESET: 3, // `⟳ 2h` limit-reset countdown tail
+  BRANCH: 4, // `⎇ branch` / `⌂ worktree` location tail
+  CACHE: 5, // the cache-read `%c` cell
+  ROSTER: 6, // live roster → collapses to a bare `●N`
+} as const;
+
 // One painted field in the single-line HUD. `text` is its full form; `reduced`,
 // when set, is a shorter painted form the shedder swaps in at `priority` instead
 // of removing the whole cell (the roster's `● opus 1` → bare `●3`). A segment

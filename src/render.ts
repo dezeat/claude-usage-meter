@@ -15,13 +15,18 @@ import {
   type ResolvedLimits,
   modelClass,
 } from "./index-store.js";
-import { assembleLine, type LineRow, type LineSegment } from "./layout.js";
+import {
+  DROP,
+  assembleLine,
+  type LineRow,
+  type LineSegment,
+} from "./layout.js";
 import { limitPill } from "./meters.js";
 import { type ParsedPayload, type RateWindow } from "./payload.js";
 
 // The two orthogonal presentation toggles (ADR-0007). Both default to the
 // existing block/bar look here so every prior test keeps passing untouched; the
-// product defaults (line + bar) are chosen at the edge from env vars.
+// product defaults (block + bar) are resolved at the edge from env vars.
 type Layout = "block" | "line";
 type Meters = "bar" | "pill";
 
@@ -78,7 +83,9 @@ function limitMeter(
 ): string {
   if (meters === "pill") return limitPill(usedPercentage, color);
   const bar = paceBar(usedPercentage, paceFraction, color, SHORT_BAR_WIDTH);
-  return `${bar} ${Math.round(usedPercentage)}%`;
+  // Clamp the printed % to 100 so an over-limit window reads the same in bar and
+  // pill mode (limitPill clamps too); the red fill already signals "over".
+  return `${bar} ${Math.min(100, Math.round(usedPercentage))}%`;
 }
 
 // The ctx meter: same bar/pill toggle, but no pace marker (it uses contextBar).
@@ -89,12 +96,12 @@ function ctxCell(
 ): string {
   if (meters === "pill") return `ctx ${limitPill(usedPercentage, color)}`;
   const bar = contextBar(usedPercentage, color, SHORT_BAR_WIDTH);
-  return `ctx ${bar} ${Math.round(usedPercentage)}%`;
+  return `ctx ${bar} ${Math.min(100, Math.round(usedPercentage))}%`;
 }
 
 // A limit cell split into its meter base (`5h ▓▓░ 52%`) and the dim reset trail
 // (`⟳ 2h`): the block layout glues them back with a space, the HUD keeps the
-// reset as the segment's droppable tail (ADR-0007 drop 3).
+// reset as the segment's droppable tail (ADR-0007, DROP.RESET).
 function limitParts(
   label: string,
   window: RateWindow,
@@ -183,7 +190,7 @@ function limitsCells(
 }
 
 // The limits row as HUD segments: ctx is load-bearing; each of 5h/7d carries its
-// reset countdown as a droppable tail that reduces to the bare meter (drop 3).
+// reset countdown as a droppable tail that reduces to the bare meter (DROP.RESET).
 function limitsLineSegments(
   payload: ParsedPayload,
   limits: ResolvedLimits | undefined,
@@ -211,7 +218,11 @@ function limitsLineSegments(
       meters,
       showDate,
     );
-    segments.push({ text: `${base} ${reset}`, reduced: base, priority: 3 });
+    segments.push({
+      text: `${base} ${reset}`,
+      reduced: base,
+      priority: DROP.RESET,
+    });
   }
   return segments;
 }
@@ -233,7 +244,7 @@ function activeClass(payload: ParsedPayload): string {
 // drops the empty one, and an empty row is omitted by the caller.
 // The location cell split into its bright repo/dir base and the full form with
 // the dim ⎇ branch (and ⌂ worktree) tail appended. The HUD sheds the tail back
-// to the base (ADR-0007 drop 4); the block layout always shows the full form.
+// to the base (ADR-0007, DROP.BRANCH); the block layout always shows the full form.
 // A normal checkout with no branch/worktree leaves base === full byte-for-byte.
 function locationParts(
   location: Location,
@@ -267,7 +278,7 @@ function currentCells(
 
 // The current row as HUD segments: the model and the repo name are load-bearing
 // (the line "starts with the model"); only the ⎇ branch / ⌂ worktree tail is
-// droppable (drop 4).
+// droppable (DROP.BRANCH).
 function currentLineSegments(
   payload: ParsedPayload,
   location: Location | undefined,
@@ -281,7 +292,7 @@ function currentLineSegments(
   }
   if (location !== undefined) {
     const { base, full } = locationParts(location, color);
-    segments.push({ text: full, reduced: base, priority: 4 });
+    segments.push({ text: full, reduced: base, priority: DROP.BRANCH });
   }
   return segments;
 }
