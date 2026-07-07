@@ -3,12 +3,18 @@
   "name": "claude-usage-meter",
   "displayName": "Claude Usage Meter",
   "description": "Live Claude Code usage meter: 5h/7d limit pace bars in the statusline, cost-forward spend, a cross-session fleet view, and a per-model cost summary after each task. Reads the statusline rate_limits payload and local session transcripts; no network calls.",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": {
     "name": "dezeat"
   },
   "homepage": "https://github.com/dezeat/claude-usage-meter#readme",
   "repository": "https://github.com/dezeat/claude-usage-meter",
   "license": "MIT",
-  "keywords": ["statusline", "usage", "cost", "rate-limits", "observability"]
+  "keywords": [
+    "statusline",
+    "usage",
+    "cost",
+    "rate-limits",
+    "observability"
+  ]
 }
