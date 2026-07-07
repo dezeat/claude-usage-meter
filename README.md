@@ -311,21 +311,29 @@ node ~/.claude/tools/claude-usage-meter/dist/report-cli.js
 
 The cross-session index is a single SQLite file at
 `~/.claude/usage-meter/index.db`, built incrementally from the transcripts under
-`~/.claude/projects`. It is written two local, idempotent ways: the statusline
-sweeps every project on each refresh, and the `Stop` `index-hook` self-persists
-the current session (with its subagents) on every turn-end. Each transcript is one
-row keyed by byte offset, so a line counts exactly once whichever path writes it.
-Nothing leaves your machine. Delete the file to reset it; it rebuilds on the next
-run.
+`~/.claude/projects`.
 
-**The line is a glance; the full detail is retained.** Every session the index
-sees is stored whole: **one row per session** keeps the **four-way token split**
-(input / output / cache-read / cache-create) **per model id**, the priced cost,
-model class, git branch, month, last-activity timestamp, machine id, and the
-subagent→parent link. The statusline shows a compact summary of this; the
-[off-session report](#off-session-report) prints the full breakdown, and a
-**multi-layer drill-down analysis** over the same data is on the
-[roadmap](https://github.com/dezeat/claude-usage-meter/issues/103).
+- **Written two local, idempotent ways** — the statusline sweeps every project on
+  each refresh, and the `Stop` `index-hook` self-persists the current session
+  (with its subagents) on every turn-end.
+- **Exactly-once accounting** — each transcript is one row keyed by byte offset,
+  so a line counts once no matter which path writes it.
+- **Yours to reset** — nothing leaves your machine; delete the file and it
+  rebuilds on the next run.
+
+**The line is a glance; the full detail is retained.** Each session is stored
+whole — one row keeps:
+
+- the **four-way token split** — input / output / cache-read / cache-create —
+  **per model id**;
+- the priced **cost**, **model class**, and **git branch**;
+- the **month**, **last-activity timestamp**, and **machine id**;
+- the **subagent→parent** link.
+
+The statusline shows a compact summary of this; the
+[off-session report](#off-session-report) prints the full breakdown, and the
+[**multi-layer drill-down analysis**](#roadmap) over the same data is on the
+roadmap.
 
 ## Pricing
 
