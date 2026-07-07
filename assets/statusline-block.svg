@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="740" height="212" viewBox="0 0 740 212" role="img" aria-label="claude-usage-meter statusline, block layout with bar meters: current, limits, spend and fleet rows">
+<svg xmlns="http://www.w3.org/2000/svg" width="740" height="212" viewBox="0 0 740 212" role="img" aria-label="claude-usage-meter statusline, block layout with pill meters: current, limits, spend and fleet rows">
   <style>
     text { font-family: "SFMono-Regular", "Consolas", "DejaVu Sans Mono", "Menlo", monospace; font-size: 15px; }
     .accent { fill: #4ea3ff; }
@@ -8,6 +8,7 @@
     .green  { fill: #3fb950; }
     .yellow { fill: #d29922; }
     .red    { fill: #f85149; }
+    .chip   { fill: #0d1117; }
   </style>
 
   <rect x="0.5" y="0.5" width="739" height="211" rx="10" fill="#0d1117" stroke="#30363d"/>
@@ -20,7 +21,20 @@
 
   <text x="28" y="78" xml:space="preserve"><tspan class="accent">current  </tspan><tspan class="bright">opus 4.8 (1m context)</tspan><tspan class="dim"> · </tspan><tspan class="bright">claude-usage-meter</tspan><tspan class="dim"> ⎇ </tspan><tspan class="base">main</tspan><tspan class="dim"> ⌂ </tspan><tspan class="base">limits-sync</tspan></text>
 
-  <text x="28" y="108" xml:space="preserve"><tspan class="accent">limits   </tspan><tspan class="base">ctx </tspan><tspan class="green">▓</tspan><tspan class="dim">░░</tspan><tspan class="base"> 40%</tspan><tspan class="dim"> · </tspan><tspan class="base">5h </tspan><tspan class="yellow">▓▓</tspan><tspan class="bright">│</tspan><tspan class="dim">░</tspan><tspan class="base"> 60%</tspan><tspan class="dim"> ⟳ 2h · </tspan><tspan class="base">7d </tspan><tspan class="red">▓</tspan><tspan class="bright">│</tspan><tspan class="red">▓▓</tspan><tspan class="base"> 85%</tspan><tspan class="dim"> ⟳ 4d (Sa 20.06)</tspan></text>
+  <text x="28" y="108" class="accent">limits</text>
+  <text x="105" y="108" class="base">ctx</text>
+  <rect class="green" x="139" y="94" width="46" height="18" rx="9"/>
+  <text x="162" y="108" text-anchor="middle" class="chip">40%</text>
+  <text x="194" y="108" class="dim">·</text>
+  <text x="212" y="108" class="base">5h</text>
+  <rect class="yellow" x="240" y="94" width="46" height="18" rx="9"/>
+  <text x="263" y="108" text-anchor="middle" class="chip">60%</text>
+  <text x="296" y="108" class="dim">⟳ 2h</text>
+  <text x="346" y="108" class="dim">·</text>
+  <text x="364" y="108" class="base">7d</text>
+  <rect class="red" x="392" y="94" width="46" height="18" rx="9"/>
+  <text x="415" y="108" text-anchor="middle" class="chip">85%</text>
+  <text x="448" y="108" class="dim">⟳ 4d (Sa 20.06)</text>
 
   <text x="28" y="138" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$3.45</tspan><tspan class="accent"> ↑</tspan><tspan class="bright">$4.10</tspan><tspan class="dim">/hr · </tspan><tspan class="bright">96%</tspan><tspan class="dim"> cached · Σ $235.92 mo</tspan></text>
 

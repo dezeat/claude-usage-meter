@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1880" height="140" viewBox="0 0 1880 140" role="img" aria-label="claude-usage-meter statusline, single-line HUD: model, location, context / 5h / 7d limits, spend and cross-session fleet folded to one row">
+  <style>
+    text { font-family: "SFMono-Regular", "Consolas", "DejaVu Sans Mono", "Menlo", monospace; font-size: 15px; }
+    .accent { fill: #4ea3ff; }
+    .bright { fill: #f0f6fc; }
+    .dim    { fill: #8b949e; }
+    .base   { fill: #c9d1d9; }
+    .green  { fill: #3fb950; }
+    .yellow { fill: #d29922; }
+    .red    { fill: #f85149; }
+  </style>
+
+  <rect x="0.5" y="0.5" width="1879" height="139" rx="10" fill="#0d1117" stroke="#30363d"/>
+  <rect x="0.5" y="0.5" width="1879" height="40" rx="10" fill="#161b22"/>
+  <rect x="0.5" y="30" width="1879" height="11" fill="#161b22"/>
+  <circle cx="24" cy="20" r="6" fill="#ff5f56"/>
+  <circle cx="44" cy="20" r="6" fill="#ffbd2e"/>
+  <circle cx="64" cy="20" r="6" fill="#27c93f"/>
+  <text x="940" y="25" text-anchor="middle" class="dim" font-size="13">claude-usage-meter</text>
+
+  <text x="28" y="88" xml:space="preserve"><tspan class="bright">opus 4.8 (1m context)</tspan><tspan class="dim"> · </tspan><tspan class="bright">claude-usage-meter</tspan><tspan class="dim"> ⎇ </tspan><tspan class="base">main</tspan><tspan class="dim"> ⌂ </tspan><tspan class="base">limits-sync</tspan><tspan class="dim"> · </tspan><tspan class="base">ctx </tspan><tspan class="green">▓</tspan><tspan class="dim">░░</tspan><tspan class="base"> 40%</tspan><tspan class="dim"> · </tspan><tspan class="base">5h </tspan><tspan class="yellow">▓▓</tspan><tspan class="bright">│</tspan><tspan class="dim">░</tspan><tspan class="base"> 60%</tspan><tspan class="dim"> ⟳ 2h · </tspan><tspan class="base">7d </tspan><tspan class="red">▓</tspan><tspan class="bright">│</tspan><tspan class="red">▓▓</tspan><tspan class="base"> 85%</tspan><tspan class="dim"> ⟳ 4d (Sa 20.06) · </tspan><tspan class="dim">ses </tspan><tspan class="bright">$3.45</tspan><tspan class="accent"> ↑</tspan><tspan class="bright">$4.10</tspan><tspan class="dim">/hr · </tspan><tspan class="bright">96%</tspan><tspan class="dim">c · Σ $235.92 mo · </tspan><tspan class="bright">4</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">8</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright">o(3)</tspan><tspan class="green"> ●</tspan><tspan class="bright">f(2)</tspan><tspan class="green"> ●</tspan><tspan class="bright">s(2)</tspan></text>
+
+  <text x="28" y="124" class="dim" font-size="12" xml:space="preserve">no network · reads stdin + local transcripts · numbers illustrative</text>
+</svg>
