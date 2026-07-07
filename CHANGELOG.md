@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.1.1](https://github.com/dezeat/claude-usage-meter/compare/v1.1.0...v1.1.1) (2026-07-07)
+
+
+### Documentation
+
+* curate the 1.1.0 changelog to match the release notes ([78456e9](https://github.com/dezeat/claude-usage-meter/commit/78456e9a6516d245449e0841280ac7688a2665c7))
+* curate the 1.1.0 changelog to match the release notes ([76c43b0](https://github.com/dezeat/claude-usage-meter/commit/76c43b0aadcad66808373fff248eb505d0ea9fc6))
+
 ## [1.1.0](https://github.com/dezeat/claude-usage-meter/compare/v1.0.1...v1.1.0) (2026-07-07)
 
 A **statusline visual facelift** ([#86](https://github.com/dezeat/claude-usage-meter/issues/86), [#100](https://github.com/dezeat/claude-usage-meter/pull/100)) — the same zero-network, local-transcript accounting, re-pitched to read faster and adapt to any prompt. No collection or pricing changed: the cross-session index still retains every per-session figure.
