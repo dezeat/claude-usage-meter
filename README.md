@@ -12,7 +12,7 @@ the statusline payload Claude Code pipes in on stdin and your local session
 transcripts under `~/.claude/projects`, and persists a cross-session index in the
 Node built-in `node:sqlite` — nothing ever leaves your machine.
 
-![claude-usage-meter statusline — the block layout: current, limits, spend and fleet rows with bar meters](assets/statusline.svg)
+![claude-usage-meter statusline — the block layout: current, limits, spend and fleet rows with bar meters](assets/statusline.png)
 
 The default is a **four-row block**: **current** names the active model and where
 you're rooted, **limits** shows account usage as short pace bars, **spend** is
@@ -20,19 +20,17 @@ cost-forward with a live burn rate, and **fleet** counts your cross-session
 sessions and names who else is live — every field and row-group separated by a dim
 `·`, each row label accent-coloured.
 
-Prefer one compact line instead? The single-line **HUD** is one env var away
-(`USAGE_METER_LAYOUT=line`, [Layout & meters](#layout--meters)):
-
-![claude-usage-meter statusline — the single-line HUD folding all four rows into one wide line](assets/statusline-hud.svg)
-
-The HUD folds the same fields onto **one line that never wraps**: it reads the
-terminal width from `COLUMNS` (fallback `80`) and sheds fields by a fixed
-priority until the line fits — the dim, static accumulators recede first (the `Σ`
-month ledger, then the session counts), then the reset/branch trails and the
-cache cell, and the live roster collapses to a bare `●N` last; the model, repo,
-`ctx` and live `ses` are load-bearing and never shed. So a narrow prompt degrades
-gracefully instead of spilling onto a second row. To stay compact it abbreviates
-the live roster to its initials (`●o(3)`) and the cache share to `96%c`.
+Prefer one compact line instead? A single-line **HUD** is one env var away
+(`USAGE_METER_LAYOUT=line`, [Layout & meters](#layout--meters)). It folds the
+same fields onto **one line that never wraps**: it reads the terminal width from
+`COLUMNS` (fallback `80`) and sheds fields by a fixed priority until the line
+fits — the dim, static accumulators recede first (the `Σ` month ledger, then the
+session counts), then the reset/branch trails and the cache cell, and the live
+roster collapses to a bare `●N` last; the model, repo, `ctx` and live `ses` are
+load-bearing and never shed. So a narrow prompt degrades gracefully instead of
+spilling onto a second row. To stay compact it abbreviates the live roster to its
+initials (`●o(3)`) and the cache share to `96%c`. Renders of the HUD and the pill
+meters live in [`assets/`](assets/).
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
 > idle / accumulated / chrome (a dim `·` separates every field and row-group), a
@@ -86,13 +84,13 @@ different cadence. Run both.
 - **`ses`** — this **session**, live: the cost, then a burn rate after an accent
   `↑` (`$4.10/hr`) whenever a duration is known.
 - **Cache-read share** — `96%c` in the HUD, `96% cached` in the block layout: the
-  fraction of tokens served from cache. It replaces the old raw `i:|c:|o:` token
-  trail and is the one cue that explains a surprisingly-low cost — agentic usage
-  is cache-read-dominated, and a cache read is far cheaper than fresh output.
+  fraction of tokens served from cache. It is the one cue that explains a
+  surprisingly-low cost — agentic usage is cache-read-dominated, and a cache read
+  is far cheaper than fresh output.
 - **`Σ … mo`** — the dim month ledger, the total cost across every class this
-  month. The per-class month cost cell (`mdl $…`) is **gone from the live line** —
-  it is reference-cadence data now served by the report CLI
-  ([ADR-0006](docs/decisions/ADR-0006-drop-spend-mdl-cell.md)).
+  month, the single accumulated figure worth a glance on the live line. Per-class
+  month costs are reference-cadence detail, served by the
+  [off-session report](#off-session-report).
 
 **fleet** — session counts first, then who else is live (e.g. `4 Σ 8`):
 
@@ -230,9 +228,8 @@ variables set inline in the `command` exactly like `NO_COLOR`
   `NO_COLOR`).
 
 They compose into four looks; an unrecognized value falls back to the default and
-never throws. Here is the `block` layout with `pill` meters:
-
-![claude-usage-meter statusline — the block layout with pill meters](assets/statusline-block.svg)
+never throws. Renders of each — the `line` HUD and the `pill` meters — live in
+[`assets/`](assets/). To pin one, set the env vars inline in the `command`:
 
 ```json
 {
@@ -313,18 +310,14 @@ row keyed by byte offset, so a line counts exactly once whichever path writes it
 Nothing leaves your machine. Delete the file to reset it; it rebuilds on the next
 run.
 
-**The visual rework compacted the line, not the data.** The facelift
-([#86](https://github.com/dezeat/claude-usage-meter/issues/86)) dropped a few
-_cells_ from the live statusline — the per-class `mdl $` figure and the raw
-`i:|c:|o:` token trail — so it reads faster, but it changed **only the display**.
-Collection and retention are untouched: **one row per session** persists the full
-**four-way token split** (input / output / cache-read / cache-create) **per model
-id**, its priced cost, model class, git branch, month, last-activity timestamp,
-machine id, and the subagent→parent link — the same accounting as before the
-rework. The **off-session report** below already surfaces the detail the line
-omits, and a richer **multi-layer drill-down analysis** over this same retained
-data is on the roadmap
-([#103](https://github.com/dezeat/claude-usage-meter/issues/103)).
+**The line is a glance; the full detail is retained.** Every session the index
+sees is stored whole: **one row per session** keeps the **four-way token split**
+(input / output / cache-read / cache-create) **per model id**, the priced cost,
+model class, git branch, month, last-activity timestamp, machine id, and the
+subagent→parent link. The statusline shows a compact summary of this; the
+[off-session report](#off-session-report) prints the full breakdown, and a
+**multi-layer drill-down analysis** over the same data is on the
+[roadmap](https://github.com/dezeat/claude-usage-meter/issues/103).
 
 ## Pricing
 
