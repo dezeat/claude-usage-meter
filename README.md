@@ -26,11 +26,13 @@ Prefer one compact line instead? The single-line **HUD** is one env var away
 ![claude-usage-meter statusline — the single-line HUD folding all four rows into one wide line](assets/statusline-hud.svg)
 
 The HUD folds the same fields onto **one line that never wraps**: it reads the
-terminal width from `COLUMNS` (fallback `80`) and sheds low-priority fields —
-trails, then totals, then labels — until the line fits, so a narrow prompt
-degrades gracefully instead of spilling onto a second row. To stay compact it
-abbreviates the live roster to its initials (`●o(3)`) and the cache share to
-`96%c`.
+terminal width from `COLUMNS` (fallback `80`) and sheds fields by a fixed
+priority until the line fits — the dim, static accumulators recede first (the `Σ`
+month ledger, then the session counts), then the reset/branch trails and the
+cache cell, and the live roster collapses to a bare `●N` last; the model, repo,
+`ctx` and live `ses` are load-bearing and never shed. So a narrow prompt degrades
+gracefully instead of spilling onto a second row. To stay compact it abbreviates
+the live roster to its initials (`●o(3)`) and the cache share to `96%c`.
 
 > Numbers are illustrative. Colour: **bright** = live / headline value, dim =
 > idle / accumulated / chrome (a dim `·` separates every field and row-group), a
@@ -310,6 +312,19 @@ the current session (with its subagents) on every turn-end. Each transcript is o
 row keyed by byte offset, so a line counts exactly once whichever path writes it.
 Nothing leaves your machine. Delete the file to reset it; it rebuilds on the next
 run.
+
+**The visual rework compacted the line, not the data.** The facelift
+([#86](https://github.com/dezeat/claude-usage-meter/issues/86)) dropped a few
+_cells_ from the live statusline — the per-class `mdl $` figure and the raw
+`i:|c:|o:` token trail — so it reads faster, but it changed **only the display**.
+Collection and retention are untouched: **one row per session** persists the full
+**four-way token split** (input / output / cache-read / cache-create) **per model
+id**, its priced cost, model class, git branch, month, last-activity timestamp,
+machine id, and the subagent→parent link — the same accounting as before the
+rework. The **off-session report** below already surfaces the detail the line
+omits, and a richer **multi-layer drill-down analysis** over this same retained
+data is on the roadmap
+([#103](https://github.com/dezeat/claude-usage-meter/issues/103)).
 
 ## Pricing
 
