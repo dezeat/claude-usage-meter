@@ -9,29 +9,30 @@ From the next release onward, entries below are generated from
 
 ## [1.1.0](https://github.com/dezeat/claude-usage-meter/compare/v1.0.1...v1.1.0) (2026-07-07)
 
+A **statusline visual facelift** ([#86](https://github.com/dezeat/claude-usage-meter/issues/86), [#100](https://github.com/dezeat/claude-usage-meter/pull/100)) — the same zero-network, local-transcript accounting, re-pitched to read faster and adapt to any prompt. No collection or pricing changed: the cross-session index still retains every per-session figure.
+
+### Highlights
+
+- **Two composable presentation toggles**, read at the I/O edge exactly like `NO_COLOR` ([ADR-0007](https://github.com/dezeat/claude-usage-meter/blob/main/docs/decisions/ADR-0007-statusline-layout-and-meter-toggles.md)):
+  - `USAGE_METER_LAYOUT` — `block` (default, four stacked rows) or `line`, a single-line **HUD that never wraps**, shedding low-priority fields by a fixed order against `COLUMNS`.
+  - `USAGE_METER_METERS` — `bar` (default) or `pill`, reverse-video severity chips that degrade to `[85%]` under `NO_COLOR`.
+- **Cadence-split spend row** — live figures bright, accumulated dim: `ses $cost` with a live **burn rate** (`↑$/hr`), the **cache-read share** as a single efficiency cue, and a dim `Σ $ mo` month total.
+- **Counts-first fleet** — `<n> Σ <total>` sessions this month, then a live roster of who else is running (`● opus 3`, or `●o(3)` in the HUD).
+- **Compacted limits** — three-cell bars where the `%` carries the precision; per-class month cost moves to the report CLI ([ADR-0006](https://github.com/dezeat/claude-usage-meter/blob/main/docs/decisions/ADR-0006-drop-spend-mdl-cell.md)).
 
 ### Features
 
-* **statusline:** C11 content model — burn rate, cache-%, short bars, drop mdl $ ([e2b6734](https://github.com/dezeat/claude-usage-meter/commit/e2b673433a8d425ae246cc95061d2c5c699ba558))
-* **statusline:** compact `96%c` cache cell in the one-line HUD ([295f1ac](https://github.com/dezeat/claude-usage-meter/commit/295f1ac0d7fccba2e240a9d8e96b54aae55532b6)), closes [#86](https://github.com/dezeat/claude-usage-meter/issues/86)
-* **statusline:** default to block layout; abbreviate HUD roster to initials ([baf81d2](https://github.com/dezeat/claude-usage-meter/commit/baf81d22d85eafd038fa491bdd4c728b2ad5d75e))
-* **statusline:** line HUD + pill meters as composable env toggles ([4daa72b](https://github.com/dezeat/claude-usage-meter/commit/4daa72badde4ff4c2462b3cc5ffe356ff934f6e0))
-* **statusline:** visual facelift — layout & meter toggles, cadence-split spend ([a5202b3](https://github.com/dezeat/claude-usage-meter/commit/a5202b3d78e411d29d4a40da0c192c107e34d8ca))
-
+- **statusline:** layout & meter toggles with a cadence-split spend row ([a5202b3](https://github.com/dezeat/claude-usage-meter/commit/a5202b3d78e411d29d4a40da0c192c107e34d8ca), [4daa72b](https://github.com/dezeat/claude-usage-meter/commit/4daa72badde4ff4c2462b3cc5ffe356ff934f6e0), [e2b6734](https://github.com/dezeat/claude-usage-meter/commit/e2b673433a8d425ae246cc95061d2c5c699ba558)), closes [#86](https://github.com/dezeat/claude-usage-meter/issues/86)
+- **statusline:** single-line HUD with a compact `96%c` cache cell and initial-abbreviated roster ([295f1ac](https://github.com/dezeat/claude-usage-meter/commit/295f1ac0d7fccba2e240a9d8e96b54aae55532b6), [baf81d2](https://github.com/dezeat/claude-usage-meter/commit/baf81d22d85eafd038fa491bdd4c728b2ad5d75e))
 
 ### Bug Fixes
 
-* **statusline:** address PR [#100](https://github.com/dezeat/claude-usage-meter/issues/100) review ([10612ee](https://github.com/dezeat/claude-usage-meter/commit/10612eefca7f55a30b3495ca1baa46deff78019e))
-
+- **statusline:** omit the `↑$0.00/hr` burn rate for a zero-cost session and clamp an over-limit bar `%` to match the pill; add a single source of truth (`DROP` table) for the HUD shed order ([10612ee](https://github.com/dezeat/claude-usage-meter/commit/10612eefca7f55a30b3495ca1baa46deff78019e)) — from the [#100](https://github.com/dezeat/claude-usage-meter/pull/100) review
 
 ### Documentation
 
-* break up the README intro into bullets; add a Roadmap section ([09d3b1e](https://github.com/dezeat/claude-usage-meter/commit/09d3b1e044acc4864b0e697b559cbd441e35a2da))
-* break up the Where-your-data-lives section into bullets ([2e169f9](https://github.com/dezeat/claude-usage-meter/commit/2e169f99f33ee46d4a12d4b32a3c319f8407ba45))
-* clarify data is retained through the facelift; fix HUD shed-order ([5af9d92](https://github.com/dezeat/claude-usage-meter/commit/5af9d92ec881bb1ff6608e6dbcf0ae68b3e02806))
-* fix statusline SVGs — widen canvases, center pill text, 1m-context model ([bcf8ac5](https://github.com/dezeat/claude-usage-meter/commit/bcf8ac5b200aa65d7be67d5f608bf580efe05cc8))
-* professional status-quo README; block view as PNG, variants in assets/ ([f171e70](https://github.com/dezeat/claude-usage-meter/commit/f171e70bbd7ee489acb8b71c04eccb505de25594))
-* refresh README + statusline visualizations for the facelift ([42a07be](https://github.com/dezeat/claude-usage-meter/commit/42a07be094a8941c0a9523bc9f8ec79e06ee1212))
+- README re-pitched as a status-quo OSS overview — the fully-fledged block view as a PNG, the HUD/pill renders in `assets/`, a new Roadmap section, and clarified data retention ([42a07be](https://github.com/dezeat/claude-usage-meter/commit/42a07be094a8941c0a9523bc9f8ec79e06ee1212), [5af9d92](https://github.com/dezeat/claude-usage-meter/commit/5af9d92ec881bb1ff6608e6dbcf0ae68b3e02806), [f171e70](https://github.com/dezeat/claude-usage-meter/commit/f171e70bbd7ee489acb8b71c04eccb505de25594), [09d3b1e](https://github.com/dezeat/claude-usage-meter/commit/09d3b1e044acc4864b0e697b559cbd441e35a2da), [2e169f9](https://github.com/dezeat/claude-usage-meter/commit/2e169f99f33ee46d4a12d4b32a3c319f8407ba45))
+- statusline SVG fixes for the facelift ([bcf8ac5](https://github.com/dezeat/claude-usage-meter/commit/bcf8ac5b200aa65d7be67d5f608bf580efe05cc8))
 
 ## [1.0.1](https://github.com/dezeat/claude-usage-meter/compare/v1.0.0...v1.0.1) (2026-07-05)
 
