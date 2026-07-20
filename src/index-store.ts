@@ -16,6 +16,7 @@ import {
   countSessionsByClassForMonth,
   countLiveSessionsByClass,
   monthClassSpendRows,
+  upsertSessionHeartbeat,
   type SessionRow,
   type LimitWindowKind,
 } from "./db.js";
@@ -53,6 +54,12 @@ export interface SessionRecord {
   // a top-level session (ADR-0001). Count/live tallies skip child records; spend
   // and sessionTotals roll them into the parent.
   parentSessionId?: string;
+  // A wall-clock heartbeat from the session's statusline. Absent rows retain
+  // lastTs fallback semantics until they receive their first heartbeat.
+  heartbeatMs?: number;
+  // False only for a heartbeat-only skeletal row. Undefined remains compatible
+  // with older in-memory fixtures; persisted transcript rows materialize true.
+  transcriptIndexed?: boolean;
 }
 
 export interface CrossSessionIndex {
@@ -330,6 +337,8 @@ function rowToRecord(row: SessionRow): SessionRecord {
     lastTs: row.lastTs,
     byteOffset: row.byteOffset,
     parentSessionId: row.parentSessionId ?? undefined,
+    heartbeatMs: row.heartbeatMs ?? undefined,
+    transcriptIndexed: row.transcriptIndexed,
   };
 }
 
@@ -348,6 +357,7 @@ function materializeIndex(
 
   for (const row of rows) {
     sessions[row.sessionId] = rowToRecord(row);
+    if (row.transcriptIndexed === false) continue;
 
     const month = row.month;
     const mo = (byMonth[month] ??= { tokens: {}, costUsd: 0 });
@@ -366,10 +376,11 @@ function monthFor(lastTs: number): string {
   return lastTs > 0 ? new Date(lastTs).toISOString().slice(0, 7) : "unknown";
 }
 
-// Counts upserts performed by updateIndex, so the refresh-debounce invariant
-// (a tick where no transcript grew performs zero writes) is directly
-// assertable. Test-only signal; nothing in the render/report path reads it.
+// Counts transcript upserts and heartbeat writes performed by updateIndex, so
+// ADR-0008's quiet-tick split is directly assertable. Test-only signals;
+// nothing in the render/report path reads them.
 let upsertCount = 0;
+let heartbeatCount = 0;
 
 export function upsertCountForTest(): number {
   return upsertCount;
@@ -377,6 +388,11 @@ export function upsertCountForTest(): number {
 
 export function resetUpsertCountForTest(): void {
   upsertCount = 0;
+  heartbeatCount = 0;
+}
+
+export function heartbeatCountForTest(): number {
+  return heartbeatCount;
 }
 
 // Incrementally fold one transcript file into its store row. Reads only the bytes
@@ -502,6 +518,7 @@ export async function updateIndex(
   pricingTable: PricingTable,
   observation?: LimitsObservation,
   activeTranscriptPath?: string,
+  heartbeatAt?: number,
 ): Promise<CrossSessionIndex> {
   const db = openDb(indexPath);
 
@@ -535,6 +552,35 @@ export async function updateIndex(
     setMeta(db, watermarkKey, String(currentMtimeNs));
   } else if (activeTranscriptPath !== undefined) {
     updateActiveSession(db, activeTranscriptPath, pricingTable);
+  }
+
+  // The only new quiet-tick write introduced by #118: one narrow heartbeat
+  // upsert for the active top-level row, independent of transcript growth. It is
+  // failure-isolated so lock contention retains the prior heartbeat when present,
+  // otherwise leaving this tick on lastTs fallback;
+  // it cannot blank the rest of the statusline.
+  if (
+    activeTranscriptPath !== undefined &&
+    heartbeatAt !== undefined &&
+    Number.isFinite(heartbeatAt) &&
+    parentSessionIdOf(activeTranscriptPath) === undefined
+  ) {
+    try {
+      const sessionId = basename(activeTranscriptPath, ".jsonl");
+      if (
+        sessionId !== "" &&
+        upsertSessionHeartbeat(db, {
+          sessionId,
+          path: activeTranscriptPath,
+          heartbeatMs: heartbeatAt,
+          parentSessionId: null,
+        })
+      ) {
+        heartbeatCount += 1;
+      }
+    } catch {
+      // The read below keeps the prior heartbeat when present, otherwise lastTs.
+    }
   }
 
   const limits =
@@ -621,8 +667,8 @@ export function sumTokens(tokens: Record<string, ModelUsage>): number {
 // store rows on). transcriptPath is a secondary lookup against the non-PK path
 // column, used only when sessionId is absent from the render payload — if both
 // are present, sessionId wins and path is never queried. Returns undefined when
-// no row matches (absence ≠ zero: the transcript may not be indexed yet this
-// render).
+// no authoritative transcript row matches (absence ≠ zero: a heartbeat-only row
+// or a not-yet-indexed transcript must still fall back to the live payload).
 export function sessionTotals(
   index: CrossSessionIndex,
   sessionId: string | undefined,
@@ -636,7 +682,8 @@ export function sessionTotals(
       (r) => r.path === transcriptPath,
     );
   }
-  if (owner === undefined) return undefined;
+  if (owner === undefined || owner.transcriptIndexed === false)
+    return undefined;
 
   // Roll the session's subagents into its total (ADR-0002): a parent's spend
   // includes its children's tokens and cost. Returns a fresh merged object, never
@@ -695,17 +742,18 @@ export function monthSessionCounts(
   return { byClass, total };
 }
 
-// Per-class count of sessions live right now (last_ts within windowMs of nowMs),
+// Per-class count of sessions live right now (heartbeat first, lastTs fallback),
 // ordered count-desc then class name. Independent of month scope by design.
 export function liveSessionCounts(
   indexPath: string,
   nowMs: number,
   windowMs: number,
+  excludeSessionId?: string,
 ): ClassCount[] {
   let counts: Map<string, number>;
   try {
     const db = openDb(indexPath);
-    counts = countLiveSessionsByClass(db, nowMs, windowMs);
+    counts = countLiveSessionsByClass(db, nowMs, windowMs, excludeSessionId);
     db.close();
   } catch {
     counts = new Map();

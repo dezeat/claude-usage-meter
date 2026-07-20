@@ -9,7 +9,30 @@ import {
 } from "./index-store.js";
 import { DROP, type LineSegment } from "./layout.js";
 
-export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
+export const DEFAULT_REFRESH_INTERVAL_MS = 10_000;
+const HEARTBEAT_GRACE_TICKS = 3;
+
+export function parseRefreshIntervalMs(value: string | undefined): number {
+  const seconds = Number(value ?? "");
+  return Number.isFinite(seconds) && seconds >= 1
+    ? seconds * 1000
+    : DEFAULT_REFRESH_INTERVAL_MS;
+}
+
+// A live session gets three opportunities to refresh before expiring. The
+// statusline edge passes its configured refresh interval; invalid values fall
+// back to Claude Code's 10-second default.
+export function heartbeatLivenessWindowMs(refreshIntervalMs: number): number {
+  const interval =
+    Number.isFinite(refreshIntervalMs) && refreshIntervalMs > 0
+      ? refreshIntervalMs
+      : DEFAULT_REFRESH_INTERVAL_MS;
+  return interval * HEARTBEAT_GRACE_TICKS;
+}
+
+export const LIVENESS_WINDOW_MS = heartbeatLivenessWindowMs(
+  DEFAULT_REFRESH_INTERVAL_MS,
+);
 
 function sortClassCounts(counts: Map<string, number>): ClassCount[] {
   return Array.from(counts, ([cls, count]) => ({ cls, count })).toSorted(
@@ -38,8 +61,8 @@ export function monthClassCounts(
   return sortClassCounts(counts);
 }
 
-// Sessions live right now (lastTs within the liveness window of nowMs), counted
-// per class. Independent of month scope: a session active across a month
+// Sessions live right now (heartbeat first, lastTs fallback), counted per class.
+// Independent of month scope: a session active across a month
 // boundary still counts here. excludeSessionId drops the current session so the
 // live tally reads "besides you" — two live opus, one of them this session,
 // renders opus 1.
@@ -47,12 +70,14 @@ export function liveClassCounts(
   sessions: CrossSessionIndex["sessions"],
   nowMs: number,
   excludeSessionId?: string,
+  windowMs = LIVENESS_WINDOW_MS,
 ): ClassCount[] {
   const counts = new Map<string, number>();
   for (const rec of Object.values(sessions)) {
     // Subagents aren't live sessions of their own (ADR-0001) — skip child records.
     if (rec.parentSessionId !== undefined) continue;
-    if (nowMs - rec.lastTs >= LIVENESS_WINDOW_MS) continue;
+    const livenessTs = rec.heartbeatMs ?? rec.lastTs;
+    if (nowMs - livenessTs >= windowMs) continue;
     if (excludeSessionId !== undefined && rec.sessionId === excludeSessionId)
       continue;
     counts.set(rec.modelClass, (counts.get(rec.modelClass) ?? 0) + 1);
@@ -116,11 +141,17 @@ export function renderRoster(
   nowMs: number,
   color: boolean,
   excludeSessionId?: string,
+  windowMs = LIVENESS_WINDOW_MS,
 ): string[] {
   const monthCounts = monthClassCounts(index.sessions, month);
   const count = countCell(monthCounts, currentClass, color);
 
-  const live = liveClassCounts(index.sessions, nowMs, excludeSessionId);
+  const live = liveClassCounts(
+    index.sessions,
+    nowMs,
+    excludeSessionId,
+    windowMs,
+  );
   if (live.length === 0) return [count];
   return [count, rosterCell(live, color)];
 }
@@ -188,6 +219,49 @@ interface SessionRef {
   transcriptPath?: string;
 }
 
+function transcriptSessionId(transcriptPath: string): string | undefined {
+  const filename = transcriptPath.split(/[\\/]/).at(-1);
+  if (filename === undefined || !filename.endsWith(".jsonl")) return undefined;
+  const sessionId = filename.slice(0, -".jsonl".length);
+  return sessionId === "" ? undefined : sessionId;
+}
+
+// The transcript identifies the statusline's owning session even when the
+// payload session_id is absent, malformed, or stale. Prefer an exact stored path,
+// then its basename id, and consult session_id only when the transcript cannot
+// identify a stored row.
+function currentSessionId(
+  sessions: CrossSessionIndex["sessions"],
+  session: SessionRef,
+): string | undefined {
+  if (session.transcriptPath !== undefined) {
+    const exact = Object.values(sessions).find(
+      (record) => record.path === session.transcriptPath,
+    );
+    if (exact !== undefined) return exact.sessionId;
+
+    const fromPath = transcriptSessionId(session.transcriptPath);
+    if (
+      fromPath !== undefined &&
+      Object.values(sessions).some((record) => record.sessionId === fromPath)
+    ) {
+      return fromPath;
+    }
+  }
+
+  if (
+    session.sessionId !== undefined &&
+    Object.values(sessions).some(
+      (record) => record.sessionId === session.sessionId,
+    )
+  ) {
+    return session.sessionId;
+  }
+  return session.transcriptPath === undefined
+    ? session.sessionId
+    : transcriptSessionId(session.transcriptPath);
+}
+
 // renderSpend returns the raw cache-read share (not a formatted cell) so each
 // layout can spell it its own way: the block layout uses `cacheCell` (`96% cached`),
 // the HUD uses `cacheCellCompact` (`96%c`). undefined when tokens are unknown.
@@ -208,10 +282,11 @@ function renderSpend(
     session.sessionId,
     session.transcriptPath,
   );
-  // The two-cost-source rule (ADR-0004): when the session is in the store its
-  // pricing-table cost is authoritative (the branch below), and its own tokens
-  // yield the cache% cell; only the not-yet-indexed live session falls back to
-  // the payload's `cost.total_cost_usd`, which carries no tokens (no cache cell).
+  // The two-cost-source rule (ADR-0004): when the session has transcript data in
+  // the store its pricing-table cost is authoritative (the branch below), and its
+  // own tokens yield the cache% cell. A missing transcript — including a
+  // heartbeat-only skeletal row — falls back to the payload's
+  // `cost.total_cost_usd`, which carries no tokens (no cache cell).
   if (totals !== undefined) {
     return {
       ses: sesCell(totals.costUsd, durationMs, color),
@@ -249,6 +324,7 @@ export function renderFleet(
   nowMs: number,
   color: boolean,
   session: SessionRef = {},
+  windowMs = LIVENESS_WINDOW_MS,
 ): FleetCells {
   const total = renderMonthly(indexPath, month, color);
   const { ses, share } = renderSpend(
@@ -272,7 +348,8 @@ export function renderFleet(
       month,
       nowMs,
       color,
-      session.sessionId,
+      currentSessionId(index.sessions, session),
+      windowMs,
     ),
   };
 }
@@ -292,6 +369,7 @@ export function fleetLineSegments(
   nowMs: number,
   color: boolean,
   session: SessionRef = {},
+  windowMs = LIVENESS_WINDOW_MS,
 ): { spend: LineSegment[]; fleet: LineSegment[] } {
   const total = renderMonthly(indexPath, month, color);
   const { ses, share } = renderSpend(
@@ -312,7 +390,12 @@ export function fleetLineSegments(
   const fleet: LineSegment[] = [
     { text: countCell(monthCounts, currentClass, color), priority: DROP.COUNT },
   ];
-  const live = liveClassCounts(index.sessions, nowMs, session.sessionId);
+  const live = liveClassCounts(
+    index.sessions,
+    nowMs,
+    currentSessionId(index.sessions, session),
+    windowMs,
+  );
   if (live.length > 0) {
     const liveTotal = live.reduce((sum, c) => sum + c.count, 0);
     fleet.push({

@@ -3,7 +3,7 @@ import { join, basename, dirname } from "node:path";
 import { aggregateTranscript } from "./aggregate.js";
 import { sumUsage } from "./format.js";
 import { cost } from "./pricing.js";
-import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, getMeta, setMeta, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, } from "./db.js";
+import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, getMeta, setMeta, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, upsertSessionHeartbeat, } from "./db.js";
 import {} from "./payload.js";
 function asRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -240,6 +240,8 @@ function rowToRecord(row) {
         lastTs: row.lastTs,
         byteOffset: row.byteOffset,
         parentSessionId: row.parentSessionId ?? undefined,
+        heartbeatMs: row.heartbeatMs ?? undefined,
+        transcriptIndexed: row.transcriptIndexed,
     };
 }
 // Materialise the in-memory CrossSessionIndex the renderers/report consume from
@@ -253,6 +255,8 @@ function materializeIndex(rows, updatedAt) {
     const byBranch = {};
     for (const row of rows) {
         sessions[row.sessionId] = rowToRecord(row);
+        if (row.transcriptIndexed === false)
+            continue;
         const month = row.month;
         const mo = (byMonth[month] ??= { tokens: {}, costUsd: 0 });
         mergeTokens(mo.tokens, row.tokens);
@@ -266,15 +270,20 @@ function materializeIndex(rows, updatedAt) {
 function monthFor(lastTs) {
     return lastTs > 0 ? new Date(lastTs).toISOString().slice(0, 7) : "unknown";
 }
-// Counts upserts performed by updateIndex, so the refresh-debounce invariant
-// (a tick where no transcript grew performs zero writes) is directly
-// assertable. Test-only signal; nothing in the render/report path reads it.
+// Counts transcript upserts and heartbeat writes performed by updateIndex, so
+// ADR-0008's quiet-tick split is directly assertable. Test-only signals;
+// nothing in the render/report path reads them.
 let upsertCount = 0;
+let heartbeatCount = 0;
 export function upsertCountForTest() {
     return upsertCount;
 }
 export function resetUpsertCountForTest() {
     upsertCount = 0;
+    heartbeatCount = 0;
+}
+export function heartbeatCountForTest() {
+    return heartbeatCount;
 }
 // Incrementally fold one transcript file into its store row. Reads only the bytes
 // past the stored offset, advances to the last complete line, and persists with the
@@ -376,7 +385,7 @@ function resolveLimits(db, observation) {
         sevenDay: resolve("seven_day", observation.sevenDay),
     };
 }
-export async function updateIndex(indexPath, claudeDir, pricingTable, observation, activeTranscriptPath) {
+export async function updateIndex(indexPath, claudeDir, pricingTable, observation, activeTranscriptPath, heartbeatAt) {
     const db = openDb(indexPath);
     // H1 sweep debounce (Discussion #63). The full cross-project sweep is O(all
     // transcripts) of stat + SQL on every refreshInterval tick, almost always to
@@ -407,6 +416,31 @@ export async function updateIndex(indexPath, claudeDir, pricingTable, observatio
     }
     else if (activeTranscriptPath !== undefined) {
         updateActiveSession(db, activeTranscriptPath, pricingTable);
+    }
+    // The only new quiet-tick write introduced by #118: one narrow heartbeat
+    // upsert for the active top-level row, independent of transcript growth. It is
+    // failure-isolated so lock contention retains the prior heartbeat when present,
+    // otherwise leaving this tick on lastTs fallback;
+    // it cannot blank the rest of the statusline.
+    if (activeTranscriptPath !== undefined &&
+        heartbeatAt !== undefined &&
+        Number.isFinite(heartbeatAt) &&
+        parentSessionIdOf(activeTranscriptPath) === undefined) {
+        try {
+            const sessionId = basename(activeTranscriptPath, ".jsonl");
+            if (sessionId !== "" &&
+                upsertSessionHeartbeat(db, {
+                    sessionId,
+                    path: activeTranscriptPath,
+                    heartbeatMs: heartbeatAt,
+                    parentSessionId: null,
+                })) {
+                heartbeatCount += 1;
+            }
+        }
+        catch {
+            // The read below keeps the prior heartbeat when present, otherwise lastTs.
+        }
     }
     const limits = observation === undefined ? undefined : resolveLimits(db, observation);
     const index = materializeIndex(allSessions(db), Date.now());
@@ -473,8 +507,8 @@ export function sumTokens(tokens) {
 // store rows on). transcriptPath is a secondary lookup against the non-PK path
 // column, used only when sessionId is absent from the render payload — if both
 // are present, sessionId wins and path is never queried. Returns undefined when
-// no row matches (absence ≠ zero: the transcript may not be indexed yet this
-// render).
+// no authoritative transcript row matches (absence ≠ zero: a heartbeat-only row
+// or a not-yet-indexed transcript must still fall back to the live payload).
 export function sessionTotals(index, sessionId, transcriptPath) {
     let owner;
     if (sessionId !== undefined) {
@@ -483,7 +517,7 @@ export function sessionTotals(index, sessionId, transcriptPath) {
     else if (transcriptPath !== undefined) {
         owner = Object.values(index.sessions).find((r) => r.path === transcriptPath);
     }
-    if (owner === undefined)
+    if (owner === undefined || owner.transcriptIndexed === false)
         return undefined;
     // Roll the session's subagents into its total (ADR-0002): a parent's spend
     // includes its children's tokens and cost. Returns a fresh merged object, never
@@ -530,13 +564,13 @@ export function monthSessionCounts(indexPath, month) {
     const total = byClass.reduce((sum, c) => sum + c.count, 0);
     return { byClass, total };
 }
-// Per-class count of sessions live right now (last_ts within windowMs of nowMs),
+// Per-class count of sessions live right now (heartbeat first, lastTs fallback),
 // ordered count-desc then class name. Independent of month scope by design.
-export function liveSessionCounts(indexPath, nowMs, windowMs) {
+export function liveSessionCounts(indexPath, nowMs, windowMs, excludeSessionId) {
     let counts;
     try {
         const db = openDb(indexPath);
-        counts = countLiveSessionsByClass(db, nowMs, windowMs);
+        counts = countLiveSessionsByClass(db, nowMs, windowMs, excludeSessionId);
         db.close();
     }
     catch {

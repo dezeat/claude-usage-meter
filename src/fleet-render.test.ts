@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 
 import {
   LIVENESS_WINDOW_MS,
+  heartbeatLivenessWindowMs,
+  parseRefreshIntervalMs,
   fleetLineSegments,
   liveClassCounts,
   monthClassCounts,
@@ -71,6 +73,7 @@ function makeIndex(
     lastTs: number;
     costUsd: number;
     parentSessionId?: string;
+    heartbeatMs?: number;
   }>,
   monthCostUsd: number,
 ): CrossSessionIndex {
@@ -87,6 +90,7 @@ function makeIndex(
       lastTs: s.lastTs,
       byteOffset: 0,
       parentSessionId: s.parentSessionId,
+      heartbeatMs: s.heartbeatMs,
     };
   }
   const month = new Date(NOW_MS).toISOString().slice(0, 7);
@@ -305,7 +309,7 @@ const JUN_NOW_MS = Date.UTC(2026, 5, 15, 12, 0, 0);
 const JUN_MONTH = "2026-06";
 const MAY_TS = Date.UTC(2026, 4, 20, 10, 0, 0);
 const JUN_IDLE_TS = JUN_NOW_MS - 10 * 60 * 1000;
-const JUN_LIVE_TS = JUN_NOW_MS - 60 * 1000;
+const JUN_LIVE_TS = JUN_NOW_MS - 10 * 1000;
 
 const TWO_MONTH_INDEX = makeIndex(
   [
@@ -481,6 +485,139 @@ test("live count includes only sessions within the liveness window, grouped per 
   );
 });
 
+test("heartbeat liveness uses three refresh ticks and rejects invalid intervals", () => {
+  assert.strictEqual(heartbeatLivenessWindowMs(10_000), 30_000);
+  assert.strictEqual(heartbeatLivenessWindowMs(60_000), 180_000);
+  assert.strictEqual(heartbeatLivenessWindowMs(0), LIVENESS_WINDOW_MS);
+  assert.strictEqual(heartbeatLivenessWindowMs(Number.NaN), LIVENESS_WINDOW_MS);
+});
+
+test("refresh interval environment values parse as seconds with a safe default", () => {
+  assert.strictEqual(parseRefreshIntervalMs("60"), 60_000);
+  assert.strictEqual(parseRefreshIntervalMs("1"), 1_000);
+  assert.strictEqual(parseRefreshIntervalMs(undefined), 10_000);
+  assert.strictEqual(parseRefreshIntervalMs("invalid"), 10_000);
+  assert.strictEqual(parseRefreshIntervalMs("0"), 10_000);
+});
+
+test("pure liveness prefers heartbeat, falls back to lastTs, and uses a strict expiry boundary", () => {
+  const windowMs = 30_000;
+  const index = makeIndex(
+    [
+      { modelClass: "opus", lastTs: NOW_MS - 1, costUsd: 0 },
+      {
+        modelClass: "sonnet",
+        lastTs: NOW_MS - 1,
+        heartbeatMs: NOW_MS - windowMs,
+        costUsd: 0,
+      },
+      {
+        modelClass: "haiku",
+        lastTs: NOW_MS - 60_000,
+        heartbeatMs: NOW_MS - windowMs + 1,
+        costUsd: 0,
+      },
+    ],
+    0,
+  );
+
+  assert.deepStrictEqual(
+    liveClassCounts(index.sessions, NOW_MS, undefined, windowMs),
+    [
+      { cls: "haiku", count: 1 },
+      { cls: "opus", count: 1 },
+    ],
+  );
+});
+
+test("block and HUD self-exclude by transcript when session_id is absent or disagrees", () => {
+  const index = makeIndex(
+    [
+      { modelClass: "opus", lastTs: NOW_MS, costUsd: 0 },
+      { modelClass: "sonnet", lastTs: NOW_MS, costUsd: 0 },
+    ],
+    0,
+  );
+  const month = new Date(NOW_MS).toISOString().slice(0, 7);
+
+  for (const session of [
+    { transcriptPath: "/fake/session-0.jsonl" },
+    {
+      sessionId: "session-1",
+      transcriptPath: "/fake/session-0.jsonl",
+    },
+  ]) {
+    const block = renderFleet(
+      index,
+      EMPTY_INDEX_PATH,
+      "opus",
+      undefined,
+      undefined,
+      month,
+      NOW_MS,
+      false,
+      session,
+    );
+    assert.deepStrictEqual(block.fleetCells, ["1 Σ 2", "● sonnet 1"]);
+
+    const hud = fleetLineSegments(
+      index,
+      EMPTY_INDEX_PATH,
+      "opus",
+      undefined,
+      undefined,
+      month,
+      NOW_MS,
+      false,
+      session,
+    );
+    assert.deepStrictEqual(
+      hud.fleet.map((segment) => segment.text),
+      ["1 Σ 2", "●s(1)"],
+    );
+  }
+});
+
+test("block and HUD both honor the refresh-derived liveness window", () => {
+  const index = makeIndex(
+    [{ modelClass: "opus", lastTs: NOW_MS - 60_000, costUsd: 0 }],
+    0,
+  );
+  const month = new Date(NOW_MS).toISOString().slice(0, 7);
+  const windowMs = heartbeatLivenessWindowMs(parseRefreshIntervalMs("60"));
+
+  const block = renderFleet(
+    index,
+    EMPTY_INDEX_PATH,
+    "sonnet",
+    undefined,
+    undefined,
+    month,
+    NOW_MS,
+    false,
+    {},
+    windowMs,
+  );
+  assert.deepStrictEqual(block.fleetCells, ["0 Σ 1", "● opus 1"]);
+
+  const hud = fleetLineSegments(
+    index,
+    EMPTY_INDEX_PATH,
+    "sonnet",
+    undefined,
+    undefined,
+    month,
+    NOW_MS,
+    false,
+    {},
+    windowMs,
+  );
+  assert.deepStrictEqual(
+    hud.fleet.map((segment) => segment.text),
+    ["0 Σ 1", "●o(1)"],
+  );
+});
+
 test("liveClassCounts excludes the named session id", () => {
   const live = liveClassCounts(
     TWO_MONTH_INDEX.sessions,
@@ -497,10 +634,10 @@ test("liveClassCounts excludes the named session id", () => {
 });
 
 test("live counts are independent of month scope across a month rollover", () => {
-  // now is one minute into July; a session whose last_ts is one minute before
+  // now is five seconds into July; a session whose last_ts is five seconds before
   // the rollover is still inside the liveness window though it belongs to June.
-  const rolloverNow = Date.UTC(2026, 6, 1, 0, 1, 0);
-  const juneEdgeTs = Date.UTC(2026, 5, 30, 23, 59, 0);
+  const rolloverNow = Date.UTC(2026, 6, 1, 0, 0, 5);
+  const juneEdgeTs = Date.UTC(2026, 5, 30, 23, 59, 55);
   assert.ok(
     rolloverNow - juneEdgeTs < LIVENESS_WINDOW_MS,
     "fixture sits inside the liveness window",

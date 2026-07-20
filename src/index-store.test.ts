@@ -20,11 +20,16 @@ import {
   monthClassSpend,
   monthOf,
   upsertCountForTest,
+  heartbeatCountForTest,
   resetUpsertCountForTest,
   type CrossSessionIndex,
   type SessionRecord,
 } from "./index-store.js";
 import { DEFAULT_PRICING } from "./pricing.js";
+import { openDb } from "./db.js";
+import { parsePayload } from "./payload.js";
+import { renderLine } from "./render.js";
+import { formatReport } from "./report.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -494,6 +499,24 @@ test("sessionTotals returns undefined when no row matches the session_id", () =>
   assert.equal(sessionTotals(index, "missing", undefined), undefined);
 });
 
+test("sessionTotals ignores a heartbeat-only row but keeps real zero-usage transcript totals authoritative", () => {
+  const index = indexOf([
+    makeRecord({ sessionId: "skeletal", transcriptIndexed: false }),
+    makeRecord({
+      sessionId: "real-zero",
+      transcriptIndexed: true,
+      tokens: {},
+      costUsd: 0,
+    }),
+  ]);
+
+  assert.strictEqual(sessionTotals(index, "skeletal", undefined), undefined);
+  assert.deepStrictEqual(sessionTotals(index, "real-zero", undefined), {
+    tokens: {},
+    costUsd: 0,
+  });
+});
+
 test("sessionTotals falls back to the path column only when session_id is absent", () => {
   const index = indexOf([
     makeRecord({ sessionId: "abc", path: "/t/abc.jsonl", costUsd: 9.9 }),
@@ -586,10 +609,12 @@ test("monthOf derives the YYYY-MM the store stamps for a timestamp", () => {
 });
 
 // ---------------------------------------------------------------------------
-// Refresh debounce: a tick where no transcript grew performs zero writes
+// Refresh debounce: a quiet tick performs zero transcript/sweep upserts and the
+// one deliberately narrow new heartbeat write (ADR-0008). Existing account-limit
+// LWW observations are a separate write path.
 // ---------------------------------------------------------------------------
 
-test("an updateIndex tick where no transcript grew performs zero upserts yet still returns correct totals", async () => {
+test("a quiet active-session tick performs zero transcript upserts and one narrow heartbeat write", async () => {
   const tmp = makeTmpDir();
   const transcript = writeJsonl(tmp, "static.jsonl", [
     assistantLine({
@@ -604,17 +629,41 @@ test("an updateIndex tick where no transcript grew performs zero upserts yet sti
   ]);
   const claudeProjects = makeClaudeDir(tmp, [transcript]);
   const dbPath = join(tmp, "index.db");
+  const activeCopy = join(
+    claudeProjects,
+    "-fake-midnight-marble",
+    "static.jsonl",
+  );
 
-  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+  await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    activeCopy,
+    1_000,
+  );
 
   // Second tick on an unchanged file: the debounce must skip the write path.
   resetUpsertCountForTest();
-  const index = await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    activeCopy,
+    2_000,
+  );
 
   assert.strictEqual(
     upsertCountForTest(),
     0,
     "no session advanced, so no upsert is performed",
+  );
+  assert.strictEqual(
+    heartbeatCountForTest(),
+    1,
+    "the sole new quiet-tick write touches only the active session heartbeat",
   );
 
   const rec = Object.values(index.sessions).find(
@@ -623,6 +672,164 @@ test("an updateIndex tick where no transcript grew performs zero upserts yet sti
   assert.ok(rec, "the stored session is still returned from the read");
   assert.strictEqual(rec.tokens["claude-sonnet-4-6"]?.inputTokens, 100);
   assert.strictEqual(rec.tokens["claude-sonnet-4-6"]?.outputTokens, 50);
+  assert.strictEqual(rec.heartbeatMs, 2_000);
+});
+
+test("a first heartbeat makes a missing active transcript visible within the same tick", async () => {
+  const tmp = makeTmpDir();
+  const claudeProjects = join(tmp, "claude", "projects");
+  const projectDir = join(claudeProjects, "-fake-midnight-marble");
+  mkdirSync(projectDir, { recursive: true });
+  const missingTranscript = join(projectDir, "joining.jsonl");
+  const dbPath = join(tmp, "index.db");
+
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    missingTranscript,
+    12_345,
+  );
+
+  assert.deepStrictEqual(index.sessions.joining, {
+    path: missingTranscript,
+    sessionId: "joining",
+    branch: "",
+    modelClass: "unknown",
+    tokens: {},
+    costUsd: 0,
+    lastTs: 0,
+    byteOffset: 0,
+    parentSessionId: undefined,
+    heartbeatMs: 12_345,
+    transcriptIndexed: false,
+  });
+  assert.deepStrictEqual(index.byMonth, {});
+  assert.deepStrictEqual(index.byBranch, {});
+  assert.match(
+    formatReport(index, new Date(12_345), false),
+    /By branch\n─────────\n[ ]{2}\(no data\)/,
+  );
+
+  const payload = parsePayload({
+    model: { id: "claude-opus-4-8", display_name: "Opus 4.8" },
+    session_id: "joining",
+    transcript_path: missingTranscript,
+    cost: { total_cost_usd: 4.2 },
+  });
+  const block = renderLine(payload, new Date(12_345), {
+    color: false,
+    index,
+    indexPath: ":memory:",
+  });
+  assert.match(block, /^spend\s+ses \$4\.20/m);
+  assert.ok(!block.includes("ses $0.00"));
+
+  const hud = renderLine(payload, new Date(12_345), {
+    color: false,
+    index,
+    indexPath: ":memory:",
+    layout: "line",
+  });
+  assert.ok(hud.includes("ses $4.20"));
+  assert.ok(!hud.includes("ses $0.00"));
+});
+
+test("a subagent path never receives or creates a statusline heartbeat", async () => {
+  const tmp = makeTmpDir();
+  const claudeProjects = join(tmp, "claude", "projects");
+  const subagentsDir = join(
+    claudeProjects,
+    "-fake-midnight-marble",
+    "parent-session",
+    "subagents",
+  );
+  mkdirSync(subagentsDir, { recursive: true });
+  const subagent = writeJsonl(subagentsDir, "agent-1.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-haiku-4-5",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const dbPath = join(tmp, "index.db");
+
+  resetUpsertCountForTest();
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    subagent,
+    12_345,
+  );
+
+  assert.strictEqual(
+    index.sessions["agent-1"]?.parentSessionId,
+    "parent-session",
+  );
+  assert.strictEqual(index.sessions["agent-1"]?.heartbeatMs, undefined);
+  assert.strictEqual(heartbeatCountForTest(), 0);
+
+  const missingSubagent = join(subagentsDir, "missing-agent.jsonl");
+  const second = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    missingSubagent,
+    23_456,
+  );
+  assert.strictEqual(
+    second.sessions["missing-agent"],
+    undefined,
+    "a missing subagent path cannot create a heartbeat-only row",
+  );
+});
+
+test("a failed heartbeat write degrades to stored transcript timing without rejecting the tick", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "degraded.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-opus-4-8",
+      input: 10,
+      output: 5,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const activeCopy = join(
+    claudeProjects,
+    "-fake-midnight-marble",
+    "degraded.jsonl",
+  );
+  const dbPath = join(tmp, "index.db");
+  await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
+
+  const db = openDb(dbPath);
+  db.exec(`CREATE TRIGGER fail_heartbeat
+    BEFORE UPDATE OF heartbeat_ms ON sessions
+    BEGIN SELECT RAISE(FAIL, 'heartbeat unavailable'); END`);
+  db.close();
+
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    activeCopy,
+    12_345,
+  );
+  assert.strictEqual(index.sessions.degraded?.heartbeatMs, undefined);
+  assert.ok(index.sessions.degraded?.lastTs !== 0, "lastTs fallback survives");
 });
 
 test("an updateIndex tick where the active session grew folds only it, not the unchanged sibling", async () => {
@@ -809,7 +1016,7 @@ test("a non-active session's in-place growth is debounced on a quiet tick, then 
   );
 });
 
-test("live counts reflect the current clock on a read-only tick: a session ages out of the window with no new bytes", async () => {
+test("a legacy row without heartbeats ages out from lastTs with no new bytes", async () => {
   const tmp = makeTmpDir();
   const dbPath = join(tmp, "index.db");
 
@@ -831,7 +1038,7 @@ test("live counts reflect the current clock on a read-only tick: a session ages 
 
   const windowMs = 5 * 60 * 1000;
 
-  // A read-only tick one minute later: still inside the 5-minute window.
+  // The legacy lastTs is still inside the caller-selected five-minute window.
   const liveNow = lastTs + 60 * 1000;
   resetUpsertCountForTest();
   await updateIndex(dbPath, claudeProjects, DEFAULT_PRICING);
@@ -842,8 +1049,8 @@ test("live counts reflect the current clock on a read-only tick: a session ages 
   );
   assert.strictEqual(liveEarly.get("opus"), 1, "session is live one minute on");
 
-  // A later read-only tick: the same unchanged session has aged past the
-  // window, so it drops out — purely from the clock, with no write.
+  // Later the same un-heartbeated row has aged past the window, so it drops out
+  // purely from the clock.
   const lateNow = lastTs + 6 * 60 * 1000;
   const liveLate = new Map(
     liveSessionCounts(dbPath, lateNow, windowMs).map((c) => [c.cls, c.count]),
