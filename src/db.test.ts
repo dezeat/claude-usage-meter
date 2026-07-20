@@ -111,7 +111,7 @@ test("two updateIndex runs over different claude dirs both persist to the shared
   ).map((r) => r.session_id);
   db.close();
   assert.deepEqual(
-    [...ids].sort(),
+    ids.toSorted(),
     ["session-a", "session-b"],
     "both sessions are rows in the DB",
   );
@@ -191,7 +191,7 @@ db.close();
   ).map((r) => r.session_id);
   db.close();
   assert.deepEqual(
-    [...ids].sort(),
+    ids.toSorted(),
     ["proc-a", "proc-b"],
     "both concurrently-written sessions survived — neither overwrote the other",
   );

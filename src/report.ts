@@ -69,7 +69,7 @@ function groupByDay(
       existing.costUsd += rec.costUsd;
     }
   }
-  return Array.from(days.values()).sort((a, b) =>
+  return Array.from(days.values()).toSorted((a, b) =>
     a.date > b.date ? -1 : a.date < b.date ? 1 : 0,
   );
 }
@@ -95,7 +95,7 @@ function groupByModelClass(
   }
   return Array.from(classes.entries())
     .map(([cls, v]) => ({ cls, ...v }))
-    .sort((a, b) => b.costUsd - a.costUsd);
+    .toSorted((a, b) => b.costUsd - a.costUsd);
 }
 
 function formatDaySection(dayRows: DayRow[], color: boolean): string {
@@ -110,7 +110,7 @@ function formatDaySection(dayRows: DayRow[], color: boolean): string {
 
   const tokenSeries = dayRows.map((r) => sumTokens(r.tokens));
   const spark = sparkline(tokenSeries);
-  const sparkChars = [...spark];
+  const sparkChars = Array.from(spark);
 
   const dateCw = 10;
   const tokCw = 9;
@@ -175,7 +175,7 @@ function formatBranchSection(
   lines.push(paint("By branch", "dim", color));
   lines.push(paint("─────────", "dim", color));
 
-  const entries = Object.entries(byBranch).sort(
+  const entries = Object.entries(byBranch).toSorted(
     ([, a], [, b]) => b.costUsd - a.costUsd,
   );
 

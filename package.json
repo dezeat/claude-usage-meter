@@ -32,7 +32,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
-    "lint": "eslint .",
+    "lint": "oxlint --type-aware",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "tsc -p tsconfig.test.json && node --test \"dist-test/**/*.test.js\"",
@@ -42,7 +42,7 @@
   },
   "lint-staged": {
     "*.{ts,js}": [
-      "eslint --fix",
+      "oxlint --fix",
       "prettier --write"
     ],
     "*.{json,md,yml,yaml}": [
@@ -50,13 +50,12 @@
     ]
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@types/node": "^25.9.5",
-    "eslint": "^10.7.0",
     "husky": "^9.1.7",
     "lint-staged": "^17.1.0",
+    "oxlint": "^1.74.0",
+    "oxlint-tsgolint": "^0.25.0",
     "prettier": "^3.9.5",
-    "typescript": "^7.0.2",
-    "typescript-eslint": "^8.64.0"
+    "typescript": "^7.0.2"
   }
 }

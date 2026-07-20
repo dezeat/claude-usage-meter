@@ -42,7 +42,7 @@ const ESC = String.fromCharCode(27);
 // counting only printable characters, then appending an ellipsis. This is the
 // final guard when even the load-bearing cells overflow, so the invariant
 // visibleLength(result) <= width holds for every input. ESC is matched by code
-// point, not a control-char regex (eslint no-control-regex).
+// point, not a control-char regex (no-control-regex).
 function truncateVisible(text, width, color) {
     const budget = Math.max(0, width - 1);
     let out = "";

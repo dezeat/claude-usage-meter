@@ -200,17 +200,20 @@ export function schemaVersion(db: DatabaseSync): number {
   return row?.user_version ?? 0;
 }
 
+function numberOrZero(value: unknown): number {
+  return typeof value === "number" ? value : 0;
+}
+
 function asUsage(value: unknown): ModelUsage {
   const u =
     typeof value === "object" && value !== null
       ? (value as Record<string, unknown>)
       : {};
-  const n = (x: unknown): number => (typeof x === "number" ? x : 0);
   return {
-    inputTokens: n(u.inputTokens),
-    outputTokens: n(u.outputTokens),
-    cacheReadTokens: n(u.cacheReadTokens),
-    cacheCreationTokens: n(u.cacheCreationTokens),
+    inputTokens: numberOrZero(u.inputTokens),
+    outputTokens: numberOrZero(u.outputTokens),
+    cacheReadTokens: numberOrZero(u.cacheReadTokens),
+    cacheCreationTokens: numberOrZero(u.cacheCreationTokens),
   };
 }
 
