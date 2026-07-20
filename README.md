@@ -20,9 +20,6 @@ Nothing ever leaves your machine.
 
 ![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
 
-_The meter stays in view directly below the Claude Code prompt and above its
-footer badges. Workspace names and values shown here are illustrative._
-
 The default look is a **four-row block**, each row a self-contained readout:
 
 - **current** — the active model and where you're rooted (repo · branch · worktree).
