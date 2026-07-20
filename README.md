@@ -18,7 +18,7 @@ locally, from:
 
 Nothing ever leaves your machine.
 
-![A Claude Code prompt containing a playful goal to improve claude-usage-meter without mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
+![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
 
 _The meter stays in view directly below the Claude Code prompt and above its
 footer badges. Workspace names and values shown here are illustrative._
