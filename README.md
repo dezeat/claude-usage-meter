@@ -18,7 +18,10 @@ locally, from:
 
 Nothing ever leaves your machine.
 
-![claude-usage-meter statusline — the block layout: current, limits, spend and fleet rows with bar meters](assets/statusline.png)
+![A Claude Code prompt containing the command /usage, with a four-row claude-usage-meter statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
+
+_The meter stays in view directly below the Claude Code prompt and above its
+footer badges. Workspace names and values shown here are illustrative._
 
 The default look is a **four-row block**, each row a self-contained readout:
 
