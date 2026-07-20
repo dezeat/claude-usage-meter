@@ -13,6 +13,8 @@ import {
   schemaVersion,
   SCHEMA_VERSION,
   upsertSession,
+  upsertSessionHeartbeat,
+  getSession,
   upsertAccountLimit,
   getAccountLimit,
   getMeta,
@@ -248,6 +250,7 @@ function seedSession(
   month: string,
   lastTs: number,
   parentSessionId: string | null = null,
+  heartbeatMs: number | null = null,
 ): void {
   const row: SessionRow = {
     sessionId: id,
@@ -260,6 +263,7 @@ function seedSession(
     byteOffset: 0,
     month,
     parentSessionId,
+    heartbeatMs,
   };
   upsertSession(db, row);
 }
@@ -295,6 +299,147 @@ test("countLiveSessionsByClass counts only sessions within the window of now, pe
 
   assert.strictEqual(live.get("opus"), 1, "idle opus excluded from live tally");
   assert.strictEqual(live.get("sonnet"), 1, "live sonnet counted");
+});
+
+test("live SQL prefers heartbeat, falls back to last_ts, and expires exactly at the strict boundary", () => {
+  const db = openDb(":memory:");
+  const now = Date.UTC(2026, 5, 15, 12, 0, 0);
+  const windowMs = 30_000;
+
+  seedSession(db, "legacy", "opus", "2026-06", now - 1, null, null);
+  seedSession(
+    db,
+    "heartbeat-wins",
+    "sonnet",
+    "2026-06",
+    now - 1,
+    null,
+    now - windowMs,
+  );
+  seedSession(
+    db,
+    "inside",
+    "haiku",
+    "2026-06",
+    now - 60_000,
+    null,
+    now - windowMs + 1,
+  );
+
+  const live = countLiveSessionsByClass(db, now, windowMs, "legacy");
+  db.close();
+
+  assert.strictEqual(live.get("opus"), undefined, "current session excluded");
+  assert.strictEqual(
+    live.get("sonnet"),
+    undefined,
+    "heartbeat at exactly the boundary is expired despite a fresh last_ts",
+  );
+  assert.strictEqual(live.get("haiku"), 1, "one millisecond inside is live");
+});
+
+test("a heartbeat update changes only heartbeat_ms and preserves transcript state", () => {
+  const db = openDb(":memory:");
+  seedSession(db, "active", "opus", "2026-06", 1234);
+  const before = db
+    .prepare("SELECT * FROM sessions WHERE session_id = ?")
+    .get("active") as Record<string, unknown>;
+
+  assert.strictEqual(
+    upsertSessionHeartbeat(db, {
+      sessionId: "active",
+      path: "/fake/active.jsonl",
+      heartbeatMs: 9000,
+      parentSessionId: null,
+    }),
+    true,
+  );
+  assert.strictEqual(
+    upsertSessionHeartbeat(db, {
+      sessionId: "active",
+      path: "/fake/active.jsonl",
+      heartbeatMs: 8000,
+      parentSessionId: null,
+    }),
+    false,
+    "an older concurrent tick cannot regress the heartbeat",
+  );
+  const after = db
+    .prepare("SELECT * FROM sessions WHERE session_id = ?")
+    .get("active") as Record<string, unknown>;
+
+  assert.strictEqual(after.heartbeat_ms, 9000);
+  for (const [key, value] of Object.entries(before)) {
+    if (key === "heartbeat_ms") continue;
+    assert.deepStrictEqual(after[key], value, `${key} was not clobbered`);
+  }
+
+  upsertSession(db, {
+    sessionId: "active",
+    path: "/fake/active.jsonl",
+    branch: "next",
+    modelClass: "opus",
+    tokens: {},
+    costUsd: 1,
+    lastTs: 2000,
+    byteOffset: 42,
+    month: "2026-06",
+    parentSessionId: null,
+  });
+  const refolded = db
+    .prepare(
+      "SELECT heartbeat_ms, byte_offset FROM sessions WHERE session_id = ?",
+    )
+    .get("active") as { heartbeat_ms: number; byte_offset: number };
+  db.close();
+
+  assert.strictEqual(refolded.byte_offset, 42, "transcript state advances");
+  assert.strictEqual(
+    refolded.heartbeat_ms,
+    9000,
+    "a later transcript upsert preserves the independent heartbeat",
+  );
+});
+
+test("a first heartbeat atomically creates a minimal top-level session row", () => {
+  const db = openDb(":memory:");
+  assert.strictEqual(
+    upsertSessionHeartbeat(db, {
+      sessionId: "new-session",
+      path: "/fake/new-session.jsonl",
+      heartbeatMs: 5000,
+      parentSessionId: null,
+    }),
+    true,
+  );
+  const row = db
+    .prepare(
+      `SELECT path, byte_offset, parent_session_id, heartbeat_ms,
+              tokens_json, last_ts
+         FROM sessions WHERE session_id = ?`,
+    )
+    .get("new-session") as {
+    path: string;
+    byte_offset: number;
+    parent_session_id: string | null;
+    heartbeat_ms: number;
+    tokens_json: string | null;
+    last_ts: number | null;
+  };
+  assert.strictEqual(getSession(db, "new-session")?.transcriptIndexed, false);
+  db.close();
+
+  assert.deepStrictEqual(
+    { ...row },
+    {
+      path: "/fake/new-session.jsonl",
+      byte_offset: 0,
+      parent_session_id: null,
+      heartbeat_ms: 5000,
+      tokens_json: null,
+      last_ts: null,
+    },
+  );
 });
 
 test("live counting is independent of month — an across-rollover session still counts live", () => {
@@ -368,7 +513,7 @@ test("opening an existing v1 store walks the ladder to the current schema, addin
   const db = openDb(dbPath);
   // The ladder runs every step from the stored version up to the current schema,
   // so a v1 store lands on SCHEMA_VERSION (v2 parent_session_id, v3 account_limits
-  // + read indexes, v4 meta).
+  // + read indexes, v4 meta, v5 heartbeat_ms).
   assert.strictEqual(
     schemaVersion(db),
     SCHEMA_VERSION,
@@ -472,7 +617,7 @@ test("the 5h and 7d windows are stored independently under their own keys", () =
   assert.strictEqual(seven?.usedPercentage, 88);
 });
 
-test("a fresh store carries the H3 read indexes on month/model_class and last_ts", () => {
+test("a fresh store carries the month, legacy timestamp, and heartbeat liveness indexes", () => {
   const db = openDb(":memory:");
   const indexes = (
     db.prepare("PRAGMA index_list(sessions)").all() as Array<{ name: string }>
@@ -485,6 +630,31 @@ test("a fresh store carries the H3 read indexes on month/model_class and last_ts
   assert.ok(
     indexes.includes("idx_sessions_last_ts"),
     "the last_ts index exists",
+  );
+  assert.ok(
+    indexes.includes("idx_sessions_liveness"),
+    "the heartbeat-first expression index exists",
+  );
+});
+
+test("the heartbeat-first cutoff query uses the liveness expression index", () => {
+  const db = openDb(":memory:");
+  const plan = db
+    .prepare(
+      `EXPLAIN QUERY PLAN
+       SELECT model_class, COUNT(*) AS n
+         FROM sessions
+        WHERE COALESCE(heartbeat_ms, last_ts) > ?
+          AND parent_session_id IS NULL
+          AND (? IS NULL OR session_id <> ?)
+        GROUP BY model_class`,
+    )
+    .all(1000, null, null) as Array<{ detail: string }>;
+  db.close();
+
+  assert.ok(
+    plan.some((step) => step.detail.includes("idx_sessions_liveness")),
+    "the planner searches the expression index instead of scanning sessions",
   );
 });
 
@@ -579,6 +749,59 @@ test("opening an existing v3 store migrates it to v4 in place, adding the meta t
     .prepare("SELECT session_id FROM sessions WHERE session_id = ?")
     .get("kept") as { session_id: string };
   assert.strictEqual(row.session_id, "kept", "the pre-existing row survived");
+  db.close();
+});
+
+test("opening an existing v4 store migrates it to v5 with a nullable heartbeat and preserves rows", () => {
+  const tmp = makeTmpDir();
+  const dbPath = join(tmp, "v4.db");
+  const v4 = new DatabaseSync(dbPath);
+  v4.exec("PRAGMA journal_mode = WAL");
+  v4.exec(
+    `CREATE TABLE sessions (
+       session_id TEXT PRIMARY KEY, path TEXT NOT NULL, branch TEXT,
+       model_class TEXT, cost_usd REAL, last_ts INTEGER,
+       byte_offset INTEGER NOT NULL, month TEXT, tokens_json TEXT,
+       parent_session_id TEXT, machine_id TEXT)`,
+  );
+  v4.exec(
+    `CREATE TABLE account_limits (
+       window_kind TEXT PRIMARY KEY, used_percentage REAL,
+       resets_at INTEGER, observed_at INTEGER NOT NULL)`,
+  );
+  v4.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT)");
+  v4.prepare(
+    "INSERT INTO sessions (session_id, path, byte_offset, last_ts) VALUES (?, ?, ?, ?)",
+  ).run("kept", "/fake/kept.jsonl", 17, 1234);
+  v4.exec("PRAGMA user_version = 4");
+  v4.close();
+
+  const db = openDb(dbPath);
+  const columns = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
+    name: string;
+  }>;
+  const row = db
+    .prepare(
+      "SELECT session_id, byte_offset, last_ts, heartbeat_ms FROM sessions WHERE session_id = ?",
+    )
+    .get("kept") as {
+    session_id: string;
+    byte_offset: number;
+    last_ts: number;
+    heartbeat_ms: number | null;
+  };
+
+  assert.strictEqual(schemaVersion(db), 5);
+  assert.ok(columns.some((column) => column.name === "heartbeat_ms"));
+  assert.strictEqual(row.session_id, "kept");
+  assert.strictEqual(row.byte_offset, 17);
+  assert.strictEqual(row.last_ts, 1234);
+  assert.strictEqual(row.heartbeat_ms, null);
+  assert.strictEqual(
+    getSession(db, "kept")?.transcriptIndexed,
+    true,
+    "a meaningful legacy row with NULL tokens_json remains authoritative",
+  );
   db.close();
 });
 

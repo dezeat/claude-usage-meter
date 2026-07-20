@@ -107,6 +107,8 @@ different cadence. Run both.
   `●` leads each live class; the roster is dropped when nothing else is live. The
   `block` layout spells the class out (`● opus 3`); the single-line HUD abbreviates
   it to the class initial with the count in parens (`●o(3)`) to stay on one line.
+  Live status is heartbeat-first, with transcript activity as a fallback for
+  legacy rows; the default 30-second window spans three default refresh ticks.
 
 ### Subagents
 
@@ -144,9 +146,10 @@ covers the moving parts (pure-core / I-O-edge split, three data flows).
   aliases; a `-YYYYMMDD` snapshot prices as its alias).
 - **The `Σ` month total and the fleet counts** come from the cross-session
   `node:sqlite` index — one row per **top-level** session carrying its priced cost
-  and model class. The live `●` roster tallies sessions whose `lastTs` is within
-  the liveness window (`LIVENESS_WINDOW_MS`, 5 min), **excluding the one you're
-  in**.
+  and model class. The live `●` roster uses each row's latest heartbeat, falling
+  back to `lastTs` for a legacy row without one. Its default 30-second liveness
+  window is three 10-second refresh ticks. The current session and subagent rows
+  are always excluded.
 - **Two cost sources, one rule.** The payload's running `cost.total_cost_usd` is
   authoritative for the **live, not-yet-indexed** session (the `ses` cell falls
   back to it); the index's price-table calc is authoritative for everything
@@ -215,10 +218,14 @@ the **absolute** path to your clone:
 - `refreshInterval` (seconds; default `10`, minimum `1`) re-runs the command on a
   fixed idle timer _in addition_ to Claude Code's events, so reset countdowns and
   live fleet counts keep ticking while you read. It runs locally over your own
-  transcripts, so **refreshing costs no API tokens**. A quiet tick — nothing new
-  under `~/.claude/projects` — skips the cross-project sweep and the index write
-  entirely behind a directory-mtime watermark; the active session is still
-  re-read every tick, so its numbers never go stale.
+  transcripts, so **refreshing costs no API tokens**. A quiet tick skips
+  transcript folding and cross-project sweep upserts, but still performs one
+  narrow heartbeat write; an account-limit observation in the payload may also
+  be persisted.
+- If you set a custom `refreshInterval`, you must mirror it in the command
+  environment as `USAGE_METER_REFRESH_INTERVAL=<seconds>` — for example,
+  `USAGE_METER_REFRESH_INTERVAL=5` alongside `"refreshInterval": 5`. This keeps
+  the live window at three refresh ticks.
 
 ### Layout & meters
 
@@ -310,9 +317,10 @@ The cross-session index is a single SQLite file at
 `~/.claude/usage-meter/index.db`, built incrementally from the transcripts under
 `~/.claude/projects`.
 
-- **Written two local, idempotent ways** — the statusline sweeps every project on
-  each refresh, and the `Stop` `index-hook` self-persists the current session
-  (with its subagents) on every turn-end.
+- **Written two local, idempotent ways** — the statusline sends a narrow heartbeat
+  each refresh and incrementally sweeps projects when transcripts change; the
+  `Stop` `index-hook` self-persists the current session (with its subagents) on
+  every turn-end.
 - **Exactly-once accounting** — each transcript is one row keyed by byte offset,
   so a line counts once no matter which path writes it.
 - **Yours to reset** — nothing leaves your machine; delete the file and it

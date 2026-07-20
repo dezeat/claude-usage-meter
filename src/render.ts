@@ -61,6 +61,9 @@ interface RenderOptions {
   // Terminal width for the `line` layout's never-wrap budget; undefined = no
   // limit (Infinity). Ignored by the block layout.
   columns?: number;
+  // Heartbeat expiry window resolved from the statusline refresh cadence at the
+  // edge. Undefined keeps the pure renderer's three-default-ticks policy.
+  livenessWindowMs?: number;
 }
 
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
@@ -329,6 +332,7 @@ function renderHud(
       now.getTime(),
       color,
       { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath },
+      options.livenessWindowMs,
     );
     rows.push(spend, fleet);
   } else if (payload.costUsd !== undefined) {
@@ -382,6 +386,7 @@ export function renderLine(
       now.getTime(),
       color,
       { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath },
+      options.livenessWindowMs,
     );
     const spend = joinFields(spendCells, color);
     const fleet = joinFields(fleetCells, color);
