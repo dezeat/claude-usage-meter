@@ -2,6 +2,10 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { updateIndex } from "./index-store.js";
+import {
+  heartbeatLivenessWindowMs,
+  parseRefreshIntervalMs,
+} from "./fleet-render.js";
 import { resolveLocation } from "./location.js";
 import { parsePayload } from "./payload.js";
 import { DEFAULT_PRICING } from "./pricing.js";
@@ -40,6 +44,7 @@ async function main(): Promise<void> {
   const raw = await readStdin();
   const payload: unknown = JSON.parse(raw);
   const parsed = parsePayload(payload);
+  const tickNow = new Date();
   // This session's 5h/7d snapshot, stamped with the edge wall clock, so the shared
   // store learns the freshest account-wide windows (Discussion #63, Part 1). The
   // resolved freshest comes back on index.limits and renderLine prefers it over the
@@ -51,13 +56,14 @@ async function main(): Promise<void> {
     {
       fiveHour: parsed.fiveHour,
       sevenDay: parsed.sevenDay,
-      observedAt: Date.now(),
+      observedAt: tickNow.getTime(),
     },
     // The session this statusline belongs to: folded every tick even when the
     // cross-project sweep is debounced, so its own usage never freezes (#63, H1).
     parsed.transcriptPath,
+    tickNow.getTime(),
   ).catch(() => null);
-  const line = renderLine(parsed, new Date(), {
+  const line = renderLine(parsed, tickNow, {
     color: colorEnabled(),
     index,
     indexPath: INDEX_PATH,
@@ -66,6 +72,9 @@ async function main(): Promise<void> {
     layout: layoutMode(),
     meters: meterMode(),
     columns: terminalColumns(),
+    livenessWindowMs: heartbeatLivenessWindowMs(
+      parseRefreshIntervalMs(process.env.USAGE_METER_REFRESH_INTERVAL),
+    ),
   });
   process.stdout.write(`${line}\n`);
 }
