@@ -18,7 +18,7 @@ locally, from:
 
 Nothing ever leaves your machine.
 
-![A Claude Code prompt containing the command /usage, with a four-row claude-usage-meter statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
+![A Claude Code prompt containing a playful goal to improve claude-usage-meter without mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
 
 _The meter stays in view directly below the Claude Code prompt and above its
 footer badges. Workspace names and values shown here are illustrative._
@@ -43,12 +43,6 @@ fields onto **one line that never wraps** — it reads the terminal width from
 narrow prompt degrades gracefully instead of spilling onto a second row. To stay
 compact it abbreviates (the roster to `●o(3)`, the cache share to `96%c`). Renders
 of the HUD and the pill meters live in [`assets/`](assets/).
-
-> **Reading the colours** — bright = live / headline value, dim = idle /
-> accumulated / chrome; a green `●` marks a live session; bars run green → yellow
-> → red by fill; in the `block` layout the row label is accent-coloured. `NO_COLOR`
-> is honoured — every glyph and the layout survive, only the hue is lost (a pill
-> degrades to bracketed text, `[85%]`). Numbers shown are illustrative.
 
 ### Three views over the same local data
 

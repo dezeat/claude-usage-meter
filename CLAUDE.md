@@ -134,8 +134,6 @@ an implementing agent must read it in-context.
 
 - **Conventional Commits**: `feat:`, `fix:`, `refactor:`, `test:`, `docs:`,
   `chore:`. One logical change per commit.
-- **No AI attribution** anywhere — no `Co-Authored-By`, no "Generated with", no
-  mention of agent tooling, in commit messages or PR text.
 - Trunk-based: a short-lived branch PRs straight to `main`. Husky runs
   lint-staged + typecheck on commit and the full `npm run check` on push; CI must
   be green. Follow `.github/PULL_REQUEST_TEMPLATE.md` — the `pr` skill carries the
