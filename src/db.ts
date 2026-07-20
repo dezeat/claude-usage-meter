@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 
 import { type ModelUsage } from "./aggregate.js";
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // The two account-wide rate-limit windows persisted in account_limits. The
 // context window is deliberately NOT here: it is legitimately per-session, so it
@@ -35,6 +35,13 @@ export interface SessionRow {
   // NULL for a top-level session; the parent session id for a subagent row
   // (ADR-0001). The row is still keyed by its own file basename.
   parentSessionId: string | null;
+  // Wall-clock statusline heartbeat. Undefined/null means a legacy or
+  // non-statusline row, whose liveness falls back to transcript event time.
+  heartbeatMs?: number | null;
+  // False only for a heartbeat-created skeletal row whose transcript has not
+  // completed a line yet. Real transcript upserts always persist tokens_json,
+  // including the authoritative empty `{}` for genuine zero usage.
+  transcriptIndexed?: boolean;
 }
 
 function isLockedError(err: unknown): boolean {
@@ -81,8 +88,9 @@ function isDuplicateColumnError(err: unknown): boolean {
 
 // v2 -> v3: the account-wide rate-limit store (Discussion #63, Part 1) and the
 // read-path indexes (#63, H3). The sessions table has only its session_id PRIMARY
-// KEY, so every month/class/liveness aggregate is a full scan; these indexes turn
-// them into O(matching rows). Created once here, gated by user_version, so a hot
+// KEY, so month/class aggregates are otherwise full scans; these indexes turn
+// them into O(matching rows). The v5 heartbeat migration adds its liveness
+// expression index separately. Created once here, gated by user_version, so a hot
 // idle tick never re-runs the DDL. CREATE INDEX/TABLE IF NOT EXISTS keeps the
 // concurrent-open race a no-op rather than a throw.
 function migrateToV3(db: DatabaseSync): void {
@@ -110,11 +118,25 @@ function migrateToV4(db: DatabaseSync): void {
   `);
 }
 
+// v4 -> v5: one nullable wall-clock heartbeat per top-level session (#118).
+// ALTER TABLE has no IF NOT EXISTS on the supported SQLite versions, so the
+// concurrent-open loser uses the same duplicate-column tolerance as v2.
+function migrateToV5(db: DatabaseSync): void {
+  try {
+    db.exec("ALTER TABLE sessions ADD COLUMN heartbeat_ms INTEGER");
+  } catch (err) {
+    if (!isDuplicateColumnError(err)) throw err;
+  }
+  db.exec(
+    "CREATE INDEX IF NOT EXISTS idx_sessions_liveness ON sessions (COALESCE(heartbeat_ms, last_ts))",
+  );
+}
+
 // The composite (month, model_class) covers both month-scoped aggregates
-// (countSessionsByClassForMonth, monthClassSpendRows); last_ts covers the live
-// query. parent_session_id is in the month index's leading filter via month, but
-// the liveness filter also tests it — keeping it out keeps the index narrow and
-// the residual predicate cheap.
+// (countSessionsByClassForMonth, monthClassSpendRows); last_ts supports legacy
+// liveness fallback. parent_session_id is in the month index's leading filter via
+// month, but the liveness filter also tests it — keeping it out keeps the index
+// narrow and the residual predicate cheap.
 function createReadIndexes(db: DatabaseSync): void {
   db.exec(
     "CREATE INDEX IF NOT EXISTS idx_sessions_month_class ON sessions (month, model_class)",
@@ -150,6 +172,11 @@ function migrateSchema(db: DatabaseSync): void {
   if (version < 4) {
     migrateToV4(db);
     db.exec("PRAGMA user_version = 4");
+  }
+
+  if (version < 5) {
+    migrateToV5(db);
+    db.exec("PRAGMA user_version = 5");
   }
 }
 
@@ -246,9 +273,19 @@ interface RawSessionRow {
   month: string | null;
   tokens_json: string | null;
   parent_session_id: string | null;
+  heartbeat_ms: number | null;
 }
 
 function toSessionRow(raw: RawSessionRow): SessionRow {
+  const heartbeatOnly =
+    raw.heartbeat_ms !== null &&
+    raw.tokens_json === null &&
+    raw.byte_offset === 0 &&
+    raw.branch === null &&
+    raw.model_class === null &&
+    raw.cost_usd === null &&
+    raw.last_ts === null &&
+    raw.month === null;
   return {
     sessionId: raw.session_id,
     path: raw.path,
@@ -260,6 +297,8 @@ function toSessionRow(raw: RawSessionRow): SessionRow {
     month: raw.month ?? "unknown",
     tokens: parseTokens(raw.tokens_json),
     parentSessionId: raw.parent_session_id,
+    heartbeatMs: raw.heartbeat_ms ?? undefined,
+    transcriptIndexed: !heartbeatOnly,
   };
 }
 
@@ -305,23 +344,29 @@ export function countSessionsByClassForMonth(
   return out;
 }
 
-// Per-class count of sessions whose last_ts is within windowMs of nowMs. Live is
-// independent of month scope by design — a session active across a month
-// boundary still counts here. The comparison is done in SQL against last_ts only;
-// there is no process-liveness probe (not available from transcripts).
+// Per-class live count, independent of month scope. Cutoff form matches the v5
+// COALESCE expression index; heartbeat is authoritative when present, with
+// last_ts retained only as the legacy-row fallback.
 export function countLiveSessionsByClass(
   db: DatabaseSync,
   nowMs: number,
   windowMs: number,
+  excludeSessionId?: string,
 ): Map<string, number> {
   const rows = db
     .prepare(
       `SELECT model_class, COUNT(*) AS n
          FROM sessions
-        WHERE ? - last_ts < ? AND parent_session_id IS NULL
+        WHERE COALESCE(heartbeat_ms, last_ts) > ?
+          AND parent_session_id IS NULL
+          AND (? IS NULL OR session_id <> ?)
         GROUP BY model_class`,
     )
-    .all(nowMs, windowMs) as unknown as ClassCountRow[];
+    .all(
+      nowMs - windowMs,
+      excludeSessionId ?? null,
+      excludeSessionId ?? null,
+    ) as unknown as ClassCountRow[];
   const out = new Map<string, number>();
   for (const row of rows) out.set(row.model_class ?? "unknown", row.n);
   return out;
@@ -372,8 +417,9 @@ export function upsertSession(db: DatabaseSync, row: SessionRow): void {
   db.prepare(
     `INSERT INTO sessions
        (session_id, path, branch, model_class, cost_usd, last_ts,
-        byte_offset, month, tokens_json, parent_session_id, machine_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+        byte_offset, month, tokens_json, parent_session_id, machine_id,
+        heartbeat_ms)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?)
      ON CONFLICT(session_id) DO UPDATE SET
        path              = excluded.path,
        branch            = excluded.branch,
@@ -395,7 +441,39 @@ export function upsertSession(db: DatabaseSync, row: SessionRow): void {
     row.month,
     JSON.stringify(row.tokens),
     row.parentSessionId,
+    row.heartbeatMs ?? null,
   );
+}
+
+export interface SessionHeartbeat {
+  sessionId: string;
+  path: string;
+  heartbeatMs: number;
+  parentSessionId: null;
+}
+
+// Insert a minimal top-level row on its first statusline tick, or stamp only an
+// existing top-level row's heartbeat. This makes joins visible before a transcript
+// has a complete line. The conflict arm is monotonic and deliberately leaves every
+// transcript-derived column untouched.
+export function upsertSessionHeartbeat(
+  db: DatabaseSync,
+  heartbeat: SessionHeartbeat,
+): boolean {
+  if (heartbeat.parentSessionId !== null) return false;
+  const result = db
+    .prepare(
+      `INSERT INTO sessions
+         (session_id, path, byte_offset, parent_session_id, heartbeat_ms)
+       VALUES (?, ?, 0, NULL, ?)
+       ON CONFLICT(session_id) DO UPDATE SET
+         heartbeat_ms = excluded.heartbeat_ms
+       WHERE sessions.parent_session_id IS NULL
+         AND (sessions.heartbeat_ms IS NULL
+              OR sessions.heartbeat_ms < excluded.heartbeat_ms)`,
+    )
+    .run(heartbeat.sessionId, heartbeat.path, heartbeat.heartbeatMs);
+  return result.changes > 0;
 }
 
 interface RawAccountLimitRow {

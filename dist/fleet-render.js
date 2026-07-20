@@ -2,7 +2,24 @@ import { paint } from "./ansi.js";
 import { burnRate, cacheReadShare, formatUsd, sumUsage } from "./format.js";
 import { monthClassSpend, monthOf, sessionTotals, } from "./index-store.js";
 import { DROP } from "./layout.js";
-export const LIVENESS_WINDOW_MS = 5 * 60 * 1000;
+export const DEFAULT_REFRESH_INTERVAL_MS = 10_000;
+const HEARTBEAT_GRACE_TICKS = 3;
+export function parseRefreshIntervalMs(value) {
+    const seconds = Number(value ?? "");
+    return Number.isFinite(seconds) && seconds >= 1
+        ? seconds * 1000
+        : DEFAULT_REFRESH_INTERVAL_MS;
+}
+// A live session gets three opportunities to refresh before expiring. The
+// statusline edge passes its configured refresh interval; invalid values fall
+// back to Claude Code's 10-second default.
+export function heartbeatLivenessWindowMs(refreshIntervalMs) {
+    const interval = Number.isFinite(refreshIntervalMs) && refreshIntervalMs > 0
+        ? refreshIntervalMs
+        : DEFAULT_REFRESH_INTERVAL_MS;
+    return interval * HEARTBEAT_GRACE_TICKS;
+}
+export const LIVENESS_WINDOW_MS = heartbeatLivenessWindowMs(DEFAULT_REFRESH_INTERVAL_MS);
 function sortClassCounts(counts) {
     return Array.from(counts, ([cls, count]) => ({ cls, count })).toSorted((a, b) => {
         if (b.count !== a.count)
@@ -26,18 +43,19 @@ export function monthClassCounts(sessions, month) {
     }
     return sortClassCounts(counts);
 }
-// Sessions live right now (lastTs within the liveness window of nowMs), counted
-// per class. Independent of month scope: a session active across a month
+// Sessions live right now (heartbeat first, lastTs fallback), counted per class.
+// Independent of month scope: a session active across a month
 // boundary still counts here. excludeSessionId drops the current session so the
 // live tally reads "besides you" — two live opus, one of them this session,
 // renders opus 1.
-export function liveClassCounts(sessions, nowMs, excludeSessionId) {
+export function liveClassCounts(sessions, nowMs, excludeSessionId, windowMs = LIVENESS_WINDOW_MS) {
     const counts = new Map();
     for (const rec of Object.values(sessions)) {
         // Subagents aren't live sessions of their own (ADR-0001) — skip child records.
         if (rec.parentSessionId !== undefined)
             continue;
-        if (nowMs - rec.lastTs >= LIVENESS_WINDOW_MS)
+        const livenessTs = rec.heartbeatMs ?? rec.lastTs;
+        if (nowMs - livenessTs >= windowMs)
             continue;
         if (excludeSessionId !== undefined && rec.sessionId === excludeSessionId)
             continue;
@@ -77,10 +95,10 @@ function rosterCellCompact(live, color) {
         .map((c) => `${paint("●", "green", color)}${paint(`${c.cls.charAt(0)}(${c.count})`, "brightWhite", color)}`)
         .join(" ");
 }
-export function renderRoster(index, currentClass, month, nowMs, color, excludeSessionId) {
+export function renderRoster(index, currentClass, month, nowMs, color, excludeSessionId, windowMs = LIVENESS_WINDOW_MS) {
     const monthCounts = monthClassCounts(index.sessions, month);
     const count = countCell(monthCounts, currentClass, color);
-    const live = liveClassCounts(index.sessions, nowMs, excludeSessionId);
+    const live = liveClassCounts(index.sessions, nowMs, excludeSessionId, windowMs);
     if (live.length === 0)
         return [count];
     return [count, rosterCell(live, color)];
@@ -119,12 +137,43 @@ function cacheCell(pct, color) {
 function cacheCellCompact(pct, color) {
     return `${paint(`${pct}%`, "brightWhite", color)}${paint("c", "dim", color)}`;
 }
+function transcriptSessionId(transcriptPath) {
+    const filename = transcriptPath.split(/[\\/]/).at(-1);
+    if (filename === undefined || !filename.endsWith(".jsonl"))
+        return undefined;
+    const sessionId = filename.slice(0, -".jsonl".length);
+    return sessionId === "" ? undefined : sessionId;
+}
+// The transcript identifies the statusline's owning session even when the
+// payload session_id is absent, malformed, or stale. Prefer an exact stored path,
+// then its basename id, and consult session_id only when the transcript cannot
+// identify a stored row.
+function currentSessionId(sessions, session) {
+    if (session.transcriptPath !== undefined) {
+        const exact = Object.values(sessions).find((record) => record.path === session.transcriptPath);
+        if (exact !== undefined)
+            return exact.sessionId;
+        const fromPath = transcriptSessionId(session.transcriptPath);
+        if (fromPath !== undefined &&
+            Object.values(sessions).some((record) => record.sessionId === fromPath)) {
+            return fromPath;
+        }
+    }
+    if (session.sessionId !== undefined &&
+        Object.values(sessions).some((record) => record.sessionId === session.sessionId)) {
+        return session.sessionId;
+    }
+    return session.transcriptPath === undefined
+        ? session.sessionId
+        : transcriptSessionId(session.transcriptPath);
+}
 function renderSpend(index, sessionCostUsd, durationMs, session, color) {
     const totals = sessionTotals(index, session.sessionId, session.transcriptPath);
-    // The two-cost-source rule (ADR-0004): when the session is in the store its
-    // pricing-table cost is authoritative (the branch below), and its own tokens
-    // yield the cache% cell; only the not-yet-indexed live session falls back to
-    // the payload's `cost.total_cost_usd`, which carries no tokens (no cache cell).
+    // The two-cost-source rule (ADR-0004): when the session has transcript data in
+    // the store its pricing-table cost is authoritative (the branch below), and its
+    // own tokens yield the cache% cell. A missing transcript — including a
+    // heartbeat-only skeletal row — falls back to the payload's
+    // `cost.total_cost_usd`, which carries no tokens (no cache cell).
     if (totals !== undefined) {
         return {
             ses: sesCell(totals.costUsd, durationMs, color),
@@ -146,7 +195,7 @@ function renderSpend(index, sessionCostUsd, durationMs, session, color) {
 // cache% cell (only when the session's tokens are known), and the dim Σ month
 // ledger. fleetCells come from the roster. The current session is threaded
 // through so the live roster tally excludes it.
-export function renderFleet(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}) {
+export function renderFleet(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}, windowMs = LIVENESS_WINDOW_MS) {
     const total = renderMonthly(indexPath, month, color);
     const { ses, share } = renderSpend(index, sessionCostUsd, durationMs, session, color);
     const spendCells = [];
@@ -157,7 +206,7 @@ export function renderFleet(index, indexPath, currentClass, sessionCostUsd, dura
     spendCells.push(total);
     return {
         spendCells,
-        fleetCells: renderRoster(index, currentClass, month, nowMs, color, session.sessionId),
+        fleetCells: renderRoster(index, currentClass, month, nowMs, color, currentSessionId(index.sessions, session), windowMs),
     };
 }
 // The spend and fleet cells as HUD segments carrying their shed priorities from
@@ -165,7 +214,7 @@ export function renderFleet(index, indexPath, currentClass, sessionCostUsd, dura
 // next (the live roster outlives it), then the cache% cell, and the roster
 // collapses to a bare `●<N>` last. The `ses` cell is load-bearing and carries no
 // priority. Same figures as renderFleet, tagged for the shedder.
-export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}) {
+export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd, durationMs, month, nowMs, color, session = {}, windowMs = LIVENESS_WINDOW_MS) {
     const total = renderMonthly(indexPath, month, color);
     const { ses, share } = renderSpend(index, sessionCostUsd, durationMs, session, color);
     const spend = [];
@@ -178,7 +227,7 @@ export function fleetLineSegments(index, indexPath, currentClass, sessionCostUsd
     const fleet = [
         { text: countCell(monthCounts, currentClass, color), priority: DROP.COUNT },
     ];
-    const live = liveClassCounts(index.sessions, nowMs, session.sessionId);
+    const live = liveClassCounts(index.sessions, nowMs, currentSessionId(index.sessions, session), windowMs);
     if (live.length > 0) {
         const liveTotal = live.reduce((sum, c) => sum + c.count, 0);
         fleet.push({
