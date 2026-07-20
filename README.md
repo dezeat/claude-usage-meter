@@ -371,7 +371,7 @@ always welcome.
 ## Develop
 
 ```bash
-npm install      # dev-only: typescript, eslint, prettier, husky
+npm install      # dev-only: typescript, oxlint, prettier, husky
 npm run check    # typecheck + lint + format check + build + tests
 ```
 

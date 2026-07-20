@@ -122,9 +122,9 @@ export function foldLines(existing, lines, seenKeys) {
     const aggregated = aggregateTranscript(filterLines);
     mergeTokens(tokens, aggregated.models);
     const cls = Object.keys(tokens).reduce((best, modelId) => {
-        const cls = modelClass(modelId);
-        if (cls !== "unknown")
-            return cls;
+        const candidate = modelClass(modelId);
+        if (candidate !== "unknown")
+            return candidate;
         return best;
     }, existing?.modelClass ?? "unknown");
     return { branch, modelClass: cls, tokens, costUsd: 0, lastTs };
@@ -506,7 +506,7 @@ export function monthOf(lastTs) {
     return monthFor(lastTs);
 }
 function sortClassCounts(counts) {
-    return Array.from(counts, ([cls, count]) => ({ cls, count })).sort((a, b) => {
+    return Array.from(counts, ([cls, count]) => ({ cls, count })).toSorted((a, b) => {
         if (b.count !== a.count)
             return b.count - a.count;
         return a.cls.localeCompare(b.cls);
