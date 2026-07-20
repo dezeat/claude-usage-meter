@@ -23,7 +23,7 @@ export function paint(
 // Strip SGR escape sequences (ESC [ … m) so column padding measures the printed
 // width, not the painted-string length — ANSI codes are non-printing. The ESC
 // byte is built via fromCharCode rather than written as a literal in the regex,
-// which would trip eslint's no-control-regex.
+// which would trip the no-control-regex lint.
 const ESC = String.fromCharCode(27);
 const SGR = new RegExp(`${ESC}\\[[0-9;]*m`, "g");
 

@@ -16,7 +16,7 @@ of the job.
 
 **No network, no telemetry, zero runtime dependencies.** The only third-party
 capability is the Node built-in `node:sqlite` (Node ≥ 22.13). Dev deps only:
-`typescript`, `@types/node`, `eslint`, `prettier`, `husky`, `lint-staged`. Adding
+`typescript`, `@types/node`, `oxlint`, `prettier`, `husky`, `lint-staged`. Adding
 a runtime dependency is a design change, not a convenience — don't.
 
 A statusline that renders fast and degrades cleanly beats a feature-rich one that
@@ -57,8 +57,8 @@ line, never a stack trace.
 ### ANSI / rendering
 
 - Colour is a hue layer over a glyph layout that survives `NO_COLOR`. Assert SGR
-  codes in tests by **string-includes**, not a control-char regex (eslint
-  `no-control-regex`).
+  codes in tests by **string-includes**, not a control-char regex
+  (`no-control-regex`).
 - Visual choices (palette, glyphs, spacing) have the maintainer as oracle — no
   golden-image tests.
 

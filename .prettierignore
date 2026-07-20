@@ -1,6 +1,7 @@
 dist/
 dist-test/
 node_modules/
+.pi-subagents/
 package-lock.json
 *.tsbuildinfo
 CHANGELOG.md

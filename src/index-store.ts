@@ -202,8 +202,8 @@ export function foldLines(
   mergeTokens(tokens, aggregated.models);
 
   const cls = Object.keys(tokens).reduce((best, modelId) => {
-    const cls = modelClass(modelId);
-    if (cls !== "unknown") return cls;
+    const candidate = modelClass(modelId);
+    if (candidate !== "unknown") return candidate;
     return best;
   }, existing?.modelClass ?? "unknown");
 
@@ -230,7 +230,7 @@ export function discoverTranscriptPaths(claudeDir: string): string[] {
 function transcriptsIn(projectDirs: string[]): string[] {
   const paths: string[] = [];
   for (const dir of projectDirs) {
-    let entries: Dirent<string>[];
+    let entries: Dirent[];
     try {
       entries = readdirSync(dir, { withFileTypes: true, encoding: "utf8" });
     } catch {
@@ -257,7 +257,7 @@ function transcriptsIn(projectDirs: string[]): string[] {
 // <sessionDir>/subagents/*.jsonl set. Empty when there is no subagents/ dir.
 function subagentFilesIn(sessionDir: string): string[] {
   const subagentsDir = join(sessionDir, "subagents");
-  let entries: Dirent<string>[];
+  let entries: Dirent[];
   try {
     entries = readdirSync(subagentsDir, {
       withFileTypes: true,
@@ -666,10 +666,12 @@ export interface ClassCount {
 }
 
 function sortClassCounts(counts: Map<string, number>): ClassCount[] {
-  return Array.from(counts, ([cls, count]) => ({ cls, count })).sort((a, b) => {
-    if (b.count !== a.count) return b.count - a.count;
-    return a.cls.localeCompare(b.cls);
-  });
+  return Array.from(counts, ([cls, count]) => ({ cls, count })).toSorted(
+    (a, b) => {
+      if (b.count !== a.count) return b.count - a.count;
+      return a.cls.localeCompare(b.cls);
+    },
+  );
 }
 
 // Sessions in the given calendar month, counted per model class in SQL plus the

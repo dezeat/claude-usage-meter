@@ -23,7 +23,7 @@ import { renderLine } from "./render.js";
 import { DEFAULT_PRICING } from "./pricing.js";
 
 // SGR codes asserted via ESC-escaped string includes — never a regex with the
-// ESC byte, which trips eslint no-control-regex.
+// ESC byte, which trips the no-control-regex lint.
 const ESC = String.fromCharCode(27);
 const DIM = `${ESC}[2m`;
 const BRIGHT = `${ESC}[97m`;
