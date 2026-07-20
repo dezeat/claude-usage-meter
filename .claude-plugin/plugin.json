@@ -10,11 +10,5 @@
   "homepage": "https://github.com/dezeat/claude-usage-meter#readme",
   "repository": "https://github.com/dezeat/claude-usage-meter",
   "license": "MIT",
-  "keywords": [
-    "statusline",
-    "usage",
-    "cost",
-    "rate-limits",
-    "observability"
-  ]
+  "keywords": ["statusline", "usage", "cost", "rate-limits", "observability"]
 }
