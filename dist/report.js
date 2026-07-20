@@ -51,7 +51,7 @@ function groupByDay(sessions, month) {
             existing.costUsd += rec.costUsd;
         }
     }
-    return Array.from(days.values()).sort((a, b) => a.date > b.date ? -1 : a.date < b.date ? 1 : 0);
+    return Array.from(days.values()).toSorted((a, b) => a.date > b.date ? -1 : a.date < b.date ? 1 : 0);
 }
 function groupByModelClass(sessions, month) {
     const classes = new Map();
@@ -74,7 +74,7 @@ function groupByModelClass(sessions, month) {
     }
     return Array.from(classes.entries())
         .map(([cls, v]) => ({ cls, ...v }))
-        .sort((a, b) => b.costUsd - a.costUsd);
+        .toSorted((a, b) => b.costUsd - a.costUsd);
 }
 function formatDaySection(dayRows, color) {
     const lines = [];
@@ -86,7 +86,7 @@ function formatDaySection(dayRows, color) {
     }
     const tokenSeries = dayRows.map((r) => sumTokens(r.tokens));
     const spark = sparkline(tokenSeries);
-    const sparkChars = [...spark];
+    const sparkChars = Array.from(spark);
     const dateCw = 10;
     const tokCw = 9;
     const costCw = 7;
@@ -133,7 +133,7 @@ function formatBranchSection(byBranch, color) {
     const lines = [];
     lines.push(paint("By branch", "dim", color));
     lines.push(paint("─────────", "dim", color));
-    const entries = Object.entries(byBranch).sort(([, a], [, b]) => b.costUsd - a.costUsd);
+    const entries = Object.entries(byBranch).toSorted(([, a], [, b]) => b.costUsd - a.costUsd);
     if (entries.length === 0) {
         lines.push(paint("  (no data)", "dim", color));
         return lines.join("\n");

@@ -145,16 +145,18 @@ export function schemaVersion(db) {
     const row = db.prepare("PRAGMA user_version").get();
     return row?.user_version ?? 0;
 }
+function numberOrZero(value) {
+    return typeof value === "number" ? value : 0;
+}
 function asUsage(value) {
     const u = typeof value === "object" && value !== null
         ? value
         : {};
-    const n = (x) => (typeof x === "number" ? x : 0);
     return {
-        inputTokens: n(u.inputTokens),
-        outputTokens: n(u.outputTokens),
-        cacheReadTokens: n(u.cacheReadTokens),
-        cacheCreationTokens: n(u.cacheCreationTokens),
+        inputTokens: numberOrZero(u.inputTokens),
+        outputTokens: numberOrZero(u.outputTokens),
+        cacheReadTokens: numberOrZero(u.cacheReadTokens),
+        cacheCreationTokens: numberOrZero(u.cacheCreationTokens),
     };
 }
 function parseTokens(json) {
