@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.1.2](https://github.com/dezeat/claude-usage-meter/compare/v1.1.1...v1.1.2) (2026-07-20)
+
+
+### Bug Fixes
+
+* make live fleet roster heartbeat-driven ([71dcdcc](https://github.com/dezeat/claude-usage-meter/commit/71dcdccb5c0616b5beb8fdf2875077c61647621a))
+* make live fleet roster heartbeat-driven ([9e5474c](https://github.com/dezeat/claude-usage-meter/commit/9e5474cd0237fb2cf5b98bb8193990ab363a6ffb))
+
+
+### Documentation
+
+* trim README hero caption ([5dabb41](https://github.com/dezeat/claude-usage-meter/commit/5dabb418c300cf0d3a8a37f1fd4e6e42c54cf93b))
+
 ## [1.1.1](https://github.com/dezeat/claude-usage-meter/compare/v1.1.0...v1.1.1) (2026-07-20)
 
 
