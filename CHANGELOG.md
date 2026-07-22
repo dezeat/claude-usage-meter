@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.1.3](https://github.com/dezeat/claude-usage-meter/compare/v1.1.2...v1.1.3) (2026-07-22)
+
+
+### Bug Fixes
+
+* name heartbeat-surfaced sessions in the live roster instead of "unknown" ([e4dff82](https://github.com/dezeat/claude-usage-meter/commit/e4dff8207d23906511ce7375b103cc6d0472c526))
+* name heartbeat-surfaced sessions in the live roster instead of "unknown" ([72250f7](https://github.com/dezeat/claude-usage-meter/commit/72250f7f582f75ab0268b478193d93c760687e49))
+
 ## [1.1.2](https://github.com/dezeat/claude-usage-meter/compare/v1.1.1...v1.1.2) (2026-07-20)
 
 
