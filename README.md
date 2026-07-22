@@ -18,7 +18,7 @@ locally, from:
 
 Nothing ever leaves your machine.
 
-![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
+![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it, above an auto-mode footer](assets/statusline.png)
 
 The default look is a **four-row block**, each row a self-contained readout:
 
