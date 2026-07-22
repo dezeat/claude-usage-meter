@@ -18,7 +18,7 @@ locally, from:
 
 Nothing ever leaves your machine.
 
-![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it](assets/statusline.png)
+![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it, above an auto-mode footer](assets/statusline.png)
 
 The default look is a **four-row block**, each row a self-contained readout:
 
@@ -308,6 +308,29 @@ npm run report
 node ~/.claude/tools/claude-usage-meter/dist/report-cli.js
 ```
 
+## How it stays live and in sync
+
+The statusline is **pull-only** — no background daemon, no network. Every render is
+a fresh, short-lived process: Claude Code re-runs the command on its
+`refreshInterval` (and on events), and each tick reads the stdin payload, any grown
+transcripts, and the shared index, draws the line, and exits. It runs entirely over
+local files, so **refreshing costs no API tokens**.
+
+Parallel sessions never talk to each other — they meet in the shared local index.
+Each session persists **its own** row (priced cost + model class) and writes a small
+**heartbeat** every tick; every other session's next refresh reads the whole index,
+so its `fleet` roster and `Σ` month total reflect every session sharing that index —
+all your parallel worktrees — within a tick or two.
+
+**Liveness is a time window, and that's a deliberate, revisable choice.** "Live
+right now" today means _wrote a heartbeat in the last 30 seconds_ (three default
+refresh ticks), so a session must keep ticking to stay in the roster — which makes
+freshness and per-session cost the same dial
+([ADR-0008](docs/decisions/ADR-0008-refresh-heartbeat-defines-live-sessions.md)). A
+PID-based alternative — probe the stored process instead of requiring a heartbeat,
+decoupling liveness from tick cadence — is spiked and **deferred**
+([Discussion #131](https://github.com/dezeat/claude-usage-meter/discussions/131)).
+
 ## Where your data lives
 
 The cross-session index is a single SQLite file at
@@ -333,9 +356,9 @@ whole — one row keeps:
 - the **subagent→parent** link.
 
 The statusline shows a compact summary of this; the
-[off-session report](#off-session-report) prints the full breakdown, and the
-[**multi-layer drill-down analysis**](#roadmap) over the same data is on the
-roadmap.
+[off-session report](#off-session-report) prints the full breakdown, and a
+[**multi-layer drill-down analysis**](https://github.com/dezeat/claude-usage-meter/issues/103)
+over the same data is on the roadmap.
 
 ## Pricing
 
@@ -347,28 +370,10 @@ drift; PRs that update the table (and bump `asOf`) are welcome** — see
 
 ## Roadmap
 
-Work is tracked as issues on the
-[project board](https://github.com/dezeat/claude-usage-meter/issues). Everything
-below stays true to the core principle — **local-only, zero runtime deps, no
-network.**
-
-- **[Multi-layer drill-down analysis](https://github.com/dezeat/claude-usage-meter/issues/103)**
-  (epic) — pivot and drill the retained per-session data across time → project →
-  model → session → token-kind, with cost and cache-read efficiency at every
-  layer. Two presentations over one shared pure rollup engine
-  ([#104](https://github.com/dezeat/claude-usage-meter/issues/104)): a `--group-by`
-  **CLI tree** ([#105](https://github.com/dezeat/claude-usage-meter/issues/105))
-  and a **self-contained HTML dashboard** export
-  ([#106](https://github.com/dezeat/claude-usage-meter/issues/106)) — one portable
-  file, no served app.
-- **[Live burn-rate windowing](https://github.com/dezeat/claude-usage-meter/issues/101)**
-  — a true windowed spend rate and velocity sparklines, from a persisted sample
-  ring.
-- **[Leaner block/HUD internals](https://github.com/dezeat/claude-usage-meter/issues/102)**
-  — one segment builder per row, so the two layouts can't drift.
-
-Have an idea? Open an issue — and pricing PRs (update the table, bump `asOf`) are
-always welcome.
+Planned work is tracked as issues on the
+[project board](https://github.com/dezeat/claude-usage-meter/issues), all true to
+the core principle — **local-only, zero runtime deps, no network**. Have an idea?
+Open an issue; pricing PRs (update the table, bump `asOf`) are always welcome.
 
 ## Develop
 
