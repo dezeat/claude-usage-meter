@@ -356,9 +356,9 @@ whole — one row keeps:
 - the **subagent→parent** link.
 
 The statusline shows a compact summary of this; the
-[off-session report](#off-session-report) prints the full breakdown, and the
-[**multi-layer drill-down analysis**](#roadmap) over the same data is on the
-roadmap.
+[off-session report](#off-session-report) prints the full breakdown, and a
+[**multi-layer drill-down analysis**](https://github.com/dezeat/claude-usage-meter/issues/103)
+over the same data is on the roadmap.
 
 ## Pricing
 
@@ -370,28 +370,10 @@ drift; PRs that update the table (and bump `asOf`) are welcome** — see
 
 ## Roadmap
 
-Work is tracked as issues on the
-[project board](https://github.com/dezeat/claude-usage-meter/issues). Everything
-below stays true to the core principle — **local-only, zero runtime deps, no
-network.**
-
-- **[Multi-layer drill-down analysis](https://github.com/dezeat/claude-usage-meter/issues/103)**
-  (epic) — pivot and drill the retained per-session data across time → project →
-  model → session → token-kind, with cost and cache-read efficiency at every
-  layer. Two presentations over one shared pure rollup engine
-  ([#104](https://github.com/dezeat/claude-usage-meter/issues/104)): a `--group-by`
-  **CLI tree** ([#105](https://github.com/dezeat/claude-usage-meter/issues/105))
-  and a **self-contained HTML dashboard** export
-  ([#106](https://github.com/dezeat/claude-usage-meter/issues/106)) — one portable
-  file, no served app.
-- **[Live burn-rate windowing](https://github.com/dezeat/claude-usage-meter/issues/101)**
-  — a true windowed spend rate and velocity sparklines, from a persisted sample
-  ring.
-- **[Leaner block/HUD internals](https://github.com/dezeat/claude-usage-meter/issues/102)**
-  — one segment builder per row, so the two layouts can't drift.
-
-Have an idea? Open an issue — and pricing PRs (update the table, bump `asOf`) are
-always welcome.
+Planned work is tracked as issues on the
+[project board](https://github.com/dezeat/claude-usage-meter/issues), all true to
+the core principle — **local-only, zero runtime deps, no network**. Have an idea?
+Open an issue; pricing PRs (update the table, bump `asOf`) are always welcome.
 
 ## Develop
 
