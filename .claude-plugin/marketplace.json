@@ -9,7 +9,7 @@
       "name": "claude-usage-meter",
       "source": "./",
       "description": "Live Claude Code usage meter: 5h/7d limit pace bars in the statusline, cost-forward spend, a cross-session fleet view, and a per-model cost summary after each task. No network, no telemetry, zero runtime dependencies.",
-      "version": "1.1.2",
+      "version": "1.1.3",
       "license": "MIT",
       "author": {
         "name": "dezeat"
