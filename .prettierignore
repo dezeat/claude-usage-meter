@@ -4,4 +4,12 @@ node_modules/
 .pi-subagents/
 package-lock.json
 *.tsbuildinfo
+
+# release-please owns these files' serialization. Its JSON updater rewrites them
+# with JSON.stringify (arrays always expanded), which prettier then wants to
+# collapse when a line fits in printWidth — so the release PR's format:check goes
+# red on the version bump and needs a manual re-collapse every release. Leaving
+# them to release-please (as with CHANGELOG.md) removes that recurring conflict.
 CHANGELOG.md
+.claude-plugin/plugin.json
+.claude-plugin/marketplace.json
