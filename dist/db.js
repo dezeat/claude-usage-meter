@@ -196,14 +196,15 @@ function parseTokens(json) {
     return out;
 }
 function toSessionRow(raw) {
+    // A heartbeat-only skeletal row: a heartbeat exists but no transcript line has
+    // ever been folded, so the byte offset is still 0 and tokens_json unset. Keyed on
+    // that pair alone — model_class MAY now be populated from the session's own
+    // payload (so the roster names it), so it can no longer be part of this test. A
+    // real transcript upsert always advances byte_offset past 0 and writes tokens_json
+    // (at least "{}"), so the offset/tokens pair uniquely marks "no transcript yet".
     const heartbeatOnly = raw.heartbeat_ms !== null &&
-        raw.tokens_json === null &&
         raw.byte_offset === 0 &&
-        raw.branch === null &&
-        raw.model_class === null &&
-        raw.cost_usd === null &&
-        raw.last_ts === null &&
-        raw.month === null;
+        raw.tokens_json === null;
     return {
         sessionId: raw.session_id,
         path: raw.path,
@@ -303,23 +304,27 @@ export function upsertSession(db, row) {
        tokens_json       = excluded.tokens_json,
        parent_session_id = excluded.parent_session_id`).run(row.sessionId, row.path, row.branch, row.modelClass, row.costUsd, row.lastTs, row.byteOffset, row.month, JSON.stringify(row.tokens), row.parentSessionId, row.heartbeatMs ?? null);
 }
-// Insert a minimal top-level row on its first statusline tick, or stamp only an
+// Insert a minimal top-level row on its first statusline tick, or stamp an
 // existing top-level row's heartbeat. This makes joins visible before a transcript
-// has a complete line. The conflict arm is monotonic and deliberately leaves every
-// transcript-derived column untouched.
+// has a complete line. The model class rides along so the live roster names the
+// session (`● opus 1`) instead of `● unknown 1` before its transcript folds; the
+// COALESCE fills it only while still NULL, so a transcript-derived class — which is
+// authoritative — is never regressed by a later heartbeat. The conflict arm stays
+// monotonic on the heartbeat and leaves every other transcript column untouched.
 export function upsertSessionHeartbeat(db, heartbeat) {
     if (heartbeat.parentSessionId !== null)
         return false;
     const result = db
         .prepare(`INSERT INTO sessions
-         (session_id, path, byte_offset, parent_session_id, heartbeat_ms)
-       VALUES (?, ?, 0, NULL, ?)
+         (session_id, path, byte_offset, parent_session_id, heartbeat_ms, model_class)
+       VALUES (?, ?, 0, NULL, ?, ?)
        ON CONFLICT(session_id) DO UPDATE SET
-         heartbeat_ms = excluded.heartbeat_ms
+         heartbeat_ms = excluded.heartbeat_ms,
+         model_class  = COALESCE(sessions.model_class, excluded.model_class)
        WHERE sessions.parent_session_id IS NULL
          AND (sessions.heartbeat_ms IS NULL
               OR sessions.heartbeat_ms < excluded.heartbeat_ms)`)
-        .run(heartbeat.sessionId, heartbeat.path, heartbeat.heartbeatMs);
+        .run(heartbeat.sessionId, heartbeat.path, heartbeat.heartbeatMs, heartbeat.modelClass ?? null);
     return result.changes > 0;
 }
 // Persist one account-wide window observation, last-writer-wins by observed_at.

@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { updateIndex } from "./index-store.js";
+import { modelClass, updateIndex } from "./index-store.js";
 import { heartbeatLivenessWindowMs, parseRefreshIntervalMs, } from "./fleet-render.js";
 import { resolveLocation } from "./location.js";
 import { parsePayload } from "./payload.js";
@@ -24,6 +24,18 @@ function layoutMode() {
 function meterMode() {
     return process.env.USAGE_METER_METERS === "pill" ? "pill" : "bar";
 }
+// The active session's model class off its payload, stamped onto its heartbeat row
+// so a just-opened session names itself in every other session's live roster
+// instead of "unknown" (it has no folded transcript yet). Mirrors render's
+// activeClass; an unusable model degrades to undefined (left NULL, never a sticky
+// "unknown"), matching modelClass's own miss sentinel.
+function activeModelClass(payload) {
+    const id = payload.modelId ?? payload.modelName?.toLowerCase();
+    if (id === undefined)
+        return undefined;
+    const cls = modelClass(id);
+    return cls === "unknown" ? undefined : cls;
+}
 // Terminal width for the never-wrap HUD. Claude Code sets COLUMNS; an absent,
 // non-numeric, or non-positive value falls back to 80.
 function terminalColumns() {
@@ -46,7 +58,7 @@ async function main() {
     }, 
     // The session this statusline belongs to: folded every tick even when the
     // cross-project sweep is debounced, so its own usage never freezes (#63, H1).
-    parsed.transcriptPath, tickNow.getTime()).catch(() => null);
+    parsed.transcriptPath, tickNow.getTime(), activeModelClass(parsed)).catch(() => null);
     const line = renderLine(parsed, tickNow, {
         color: colorEnabled(),
         index,
