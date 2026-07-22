@@ -519,6 +519,7 @@ export async function updateIndex(
   observation?: LimitsObservation,
   activeTranscriptPath?: string,
   heartbeatAt?: number,
+  activeModelClass?: string,
 ): Promise<CrossSessionIndex> {
   const db = openDb(indexPath);
 
@@ -574,6 +575,12 @@ export async function updateIndex(
           path: activeTranscriptPath,
           heartbeatMs: heartbeatAt,
           parentSessionId: null,
+          // "unknown" is left NULL, not persisted: a sticky "unknown" would block
+          // COALESCE from ever filling the real class on a later tick.
+          modelClass:
+            activeModelClass !== undefined && activeModelClass !== "unknown"
+              ? activeModelClass
+              : null,
         })
       ) {
         heartbeatCount += 1;

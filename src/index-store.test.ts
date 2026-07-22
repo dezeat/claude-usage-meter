@@ -736,6 +736,45 @@ test("a first heartbeat makes a missing active transcript visible within the sam
   assert.ok(!hud.includes("ses $0.00"));
 });
 
+test("the active session's model class rides its heartbeat into the roster-visible index", async () => {
+  const tmp = makeTmpDir();
+  const claudeProjects = join(tmp, "claude", "projects");
+  const projectDir = join(claudeProjects, "-fake-midnight-marble");
+  mkdirSync(projectDir, { recursive: true });
+  // A just-opened session: no transcript on disk yet, but its payload knows the
+  // model. The class must reach the shared index so every OTHER session's live
+  // roster names it "opus", not "unknown".
+  const missingTranscript = join(projectDir, "opening.jsonl");
+  const dbPath = join(tmp, "index.db");
+
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    missingTranscript,
+    12_345,
+    "opus",
+  );
+
+  const rec = index.sessions.opening;
+  assert.strictEqual(
+    rec?.modelClass,
+    "opus",
+    "the heartbeat carried the class",
+  );
+  assert.strictEqual(
+    rec?.transcriptIndexed,
+    false,
+    "still skeletal — the class does not promote it into spend rollups",
+  );
+  assert.deepStrictEqual(index.byMonth, {}, "no transcript, no month spend");
+
+  // The roster (from another session's viewpoint) names the class, not unknown.
+  const live = liveSessionCounts(dbPath, 12_345, 30_000);
+  assert.deepStrictEqual(live, [{ cls: "opus", count: 1 }]);
+});
+
 test("a subagent path never receives or creates a statusline heartbeat", async () => {
   const tmp = makeTmpDir();
   const claudeProjects = join(tmp, "claude", "projects");
