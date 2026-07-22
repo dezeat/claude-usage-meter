@@ -30,7 +30,7 @@ export interface CostByModel {
 // hand. Keys are dateless aliases — normalizeModelId() strips the -YYYYMMDD
 // snapshot suffix that pre-4.6 transcripts carry, so one entry prices both forms.
 export const DEFAULT_PRICING: PricingTable = {
-  asOf: "2026-06-13",
+  asOf: "2026-07-22",
   rates: {
     "claude-opus-4-8": opus(),
     "claude-opus-4-7": opus(),
@@ -39,6 +39,10 @@ export const DEFAULT_PRICING: PricingTable = {
     // Opus 4.1 and 4.0 predate the 4.6 price drop and still bill at $15/$75.
     "claude-opus-4-1": opusLegacy(),
     "claude-opus-4-0": opusLegacy(),
+    // Sonnet 5 shares the $3/$15 Sonnet tier. Its $2/$10 launch promo (through
+    // 2026-08-31) is a time-boxed discount this dateless sticker table doesn't
+    // model — priced at the standard rate, as every other entry is.
+    "claude-sonnet-5": sonnet(),
     "claude-sonnet-4-6": sonnet(),
     "claude-sonnet-4-5": sonnet(),
     "claude-sonnet-4-0": sonnet(),

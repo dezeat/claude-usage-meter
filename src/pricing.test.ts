@@ -112,3 +112,9 @@ test("Mythos 5 is priced at the same rate as Fable 5", () => {
     10,
   );
 });
+
+test("current Sonnet 5 bills 1M input tokens at the $3 Sonnet rate", () => {
+  const result = cost(oneMillionInput("claude-sonnet-5"), DEFAULT_PRICING);
+  assert.equal(result.totalUsd, 3); // published standard rate $3/MTok input
+  assert.equal(result.perModel[0]?.known, true);
+});
