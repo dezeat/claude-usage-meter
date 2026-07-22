@@ -110,7 +110,7 @@ Coordination state and most documentation live in **GitHub**, not the repo — s
 work is visible and continuable across sessions, users, and machines (context lost
 between agents is the dominant multi-agent failure mode):
 
-- **PM hierarchy** — epics / stories / tickets are **GitHub Issues** on a
+- **PM hierarchy** — epics / stories / tasks are **GitHub Issues** on a
   **Project** board. The board is the single source of status.
 - **Design, knowledge, open questions, decision rationale** — **GitHub
   Discussions** (`Design` / `Decisions` / `Handovers` categories).
