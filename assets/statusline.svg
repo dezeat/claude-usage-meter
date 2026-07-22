@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="390" viewBox="0 0 920 390" role="img" aria-label="Claude Code input bar with the goal improve claude-usage-meter, make no mistakes, followed by a four-row statusline and footer badges, showing synthetic illustrative data">
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="300" viewBox="0 0 920 300" role="img" aria-label="A Claude Code input bar with the goal improve claude-usage-meter, make no mistakes, above a four-row statusline showing current, limits, spend and fleet data with synthetic illustrative values, and an auto-mode footer">
   <defs>
     <linearGradient id="terminal-bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#11161d"/>
@@ -8,7 +8,7 @@
       <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000000" flood-opacity="0.38"/>
     </filter>
     <clipPath id="terminal-clip">
-      <rect x="20" y="18" width="880" height="354" rx="12"/>
+      <rect x="20" y="18" width="880" height="264" rx="12"/>
     </clipPath>
   </defs>
 
@@ -17,59 +17,35 @@
       font-family: "SFMono-Regular", "Cascadia Code", "Consolas", "DejaVu Sans Mono", "Menlo", monospace;
       font-size: 14px;
     }
-    .small  { font-size: 12px; }
-    .label  { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; }
     .accent { fill: #58a6ff; }
     .claude { fill: #d97757; }
     .bright { fill: #f0f6fc; }
     .base   { fill: #c9d1d9; }
     .dim    { fill: #7d8590; }
-    .faint  { fill: #8b949e; }
     .green  { fill: #3fb950; }
-    .yellow { fill: #d29922; }
     .red    { fill: #f85149; }
   </style>
 
-  <rect width="920" height="390" fill="#070a0e"/>
+  <rect width="920" height="300" fill="#070a0e"/>
   <g filter="url(#shadow)">
-    <rect x="20" y="18" width="880" height="354" rx="12" fill="url(#terminal-bg)" stroke="#30363d"/>
+    <rect x="20" y="18" width="880" height="264" rx="12" fill="url(#terminal-bg)" stroke="#30363d"/>
   </g>
 
   <g clip-path="url(#terminal-clip)">
-    <rect x="20" y="18" width="880" height="38" fill="#171c24"/>
-    <path d="M20 56H900" stroke="#2b313a"/>
-    <circle cx="41" cy="37" r="5" fill="#ff5f56"/>
-    <circle cx="59" cy="37" r="5" fill="#ffbd2e"/>
-    <circle cx="77" cy="37" r="5" fill="#27c93f"/>
-    <text x="460" y="42" text-anchor="middle" class="dim small">claude code · demo workspace</text>
+    <rect x="38" y="40" width="844" height="54" rx="8" fill="#10151c" stroke="#8f5544" stroke-width="1.5"/>
+    <text x="57" y="73" class="claude" font-size="18">❯</text>
+    <text x="83" y="72" class="bright">/goal improve claude-usage-meter, make no mistakes</text>
 
-    <text x="48" y="86" class="dim">●</text>
-    <text x="70" y="86" class="base">I’m ready. What would you like to work on?</text>
-    <text x="48" y="110" class="faint small">  Tip: ask about the codebase, make a change, or run a command.</text>
+    <path d="M20 118H900" stroke="#2b313a"/>
 
-    <rect x="38" y="128" width="844" height="58" rx="8" fill="#10151c" stroke="#8f5544" stroke-width="1.5"/>
-    <text x="57" y="163" class="claude" font-size="18">❯</text>
-    <text x="83" y="162" class="bright">/goal improve claude-usage-meter, make no mistakes</text>
+    <text x="54" y="150" xml:space="preserve"><tspan class="accent">current  </tspan><tspan class="bright">opus 4.8 (1m context)</tspan><tspan class="dim"> · </tspan><tspan class="bright">claude-usage-meter</tspan><tspan class="dim"> ⎇ </tspan><tspan class="base">main</tspan><tspan class="dim"> ⌂ </tspan><tspan class="base">root</tspan></text>
 
-    <rect x="38" y="198" width="844" height="144" rx="8" fill="#0d1218" stroke="#30363d"/>
-    <rect x="38" y="198" width="844" height="25" rx="8" fill="#131a22"/>
-    <rect x="38" y="215" width="844" height="8" fill="#131a22"/>
-    <text x="54" y="215" class="label dim">STATUSLINE</text>
-    <text x="866" y="215" text-anchor="end" class="small faint">local · live</text>
+    <text x="54" y="176" xml:space="preserve"><tspan class="accent">limits   </tspan><tspan class="base">5h </tspan><tspan class="green">▓</tspan><tspan class="bright">│</tspan><tspan class="dim">░░</tspan><tspan class="base"> 42%</tspan><tspan class="dim"> ⟳ 2h · </tspan><tspan class="base">7d </tspan><tspan class="red">▓▓▓</tspan><tspan class="bright">│</tspan><tspan class="red">░</tspan><tspan class="base"> 78%</tspan><tspan class="dim"> ⟳ 3d (Sa 26.07)</tspan></text>
 
-    <text x="54" y="246" xml:space="preserve"><tspan class="accent">current  </tspan><tspan class="bright">opus 4.8 (1m context)</tspan><tspan class="dim"> · </tspan><tspan class="bright">claude-usage-meter</tspan><tspan class="dim"> ⎇ </tspan><tspan class="base">main</tspan><tspan class="dim"> ⌂ </tspan><tspan class="base">limits-sync</tspan></text>
+    <text x="54" y="202" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$2.14</tspan><tspan class="dim"> · Σ $246.80 mo</tspan></text>
 
-    <text x="54" y="272" xml:space="preserve"><tspan class="accent">limits   </tspan><tspan class="base">ctx </tspan><tspan class="green">▓</tspan><tspan class="dim">░░</tspan><tspan class="base"> 40%</tspan><tspan class="dim"> · </tspan><tspan class="base">5h </tspan><tspan class="yellow">▓▓</tspan><tspan class="bright">│</tspan><tspan class="dim">░</tspan><tspan class="base"> 60%</tspan><tspan class="dim"> ⟳ 2h · </tspan><tspan class="base">7d </tspan><tspan class="red">▓</tspan><tspan class="bright">│</tspan><tspan class="red">▓▓</tspan><tspan class="base"> 85%</tspan><tspan class="dim"> ⟳ 4d (Sa 20.06)</tspan></text>
+    <text x="54" y="228" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">6</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">11</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> opus 2</tspan></text>
 
-    <text x="54" y="298" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$3.45</tspan><tspan class="accent"> ↑</tspan><tspan class="bright">$4.10</tspan><tspan class="dim">/hr · </tspan><tspan class="bright">96%</tspan><tspan class="dim"> cached · Σ $235.92 mo</tspan></text>
-
-    <text x="54" y="324" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">4</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">8</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> opus 3</tspan><tspan class="green"> ●</tspan><tspan class="bright"> fable 2</tspan><tspan class="green"> ●</tspan><tspan class="bright"> sonnet 2</tspan></text>
-
-    <rect x="48" y="349" width="108" height="18" rx="9" fill="#171c24" stroke="#30363d"/>
-    <text x="102" y="362" text-anchor="middle" class="faint small">? shortcuts</text>
-    <rect x="706" y="349" width="78" height="18" rx="9" fill="#171c24" stroke="#30363d"/>
-    <text x="745" y="362" text-anchor="middle" class="faint small">Opus 4.8</text>
-    <rect x="792" y="349" width="80" height="18" rx="9" fill="#171c24" stroke="#30363d"/>
-    <text x="832" y="362" text-anchor="middle" class="faint small">normal</text>
+    <text x="54" y="262" xml:space="preserve"><tspan class="claude">⏵⏵ auto mode on</tspan><tspan class="dim"> (shift+tab to cycle) · ← for agents</tspan></text>
   </g>
 </svg>
