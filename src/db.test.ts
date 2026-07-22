@@ -442,6 +442,73 @@ test("a first heartbeat atomically creates a minimal top-level session row", () 
   );
 });
 
+test("a first heartbeat persists the session's model class so the roster names it, not unknown", () => {
+  const db = openDb(":memory:");
+  upsertSessionHeartbeat(db, {
+    sessionId: "fresh",
+    path: "/fake/fresh.jsonl",
+    heartbeatMs: 5000,
+    parentSessionId: null,
+    modelClass: "opus",
+  });
+  const row = getSession(db, "fresh");
+  db.close();
+
+  assert.strictEqual(
+    row?.modelClass,
+    "opus",
+    "the heartbeat carries the class",
+  );
+  assert.strictEqual(
+    row?.transcriptIndexed,
+    false,
+    "a classed heartbeat row is still skeletal: no transcript folded, so spend rollups skip it",
+  );
+});
+
+test("a heartbeat fills a null model class but never regresses a transcript-derived one", () => {
+  const db = openDb(":memory:");
+  // A real folded transcript row: byte offset advanced, tokens present, class
+  // authoritative. Its heartbeat is still null (a legacy/Stop-hook row).
+  upsertSession(db, {
+    sessionId: "folded",
+    path: "/fake/folded.jsonl",
+    branch: "main",
+    modelClass: "opus",
+    tokens: {
+      "claude-opus-4-8": {
+        inputTokens: 1,
+        outputTokens: 1,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      },
+    },
+    costUsd: 1,
+    lastTs: 1000,
+    byteOffset: 100,
+    month: "2026-06",
+    parentSessionId: null,
+  });
+  // A heartbeat carrying a different class must not overwrite the folded one —
+  // the transcript is authoritative for model_class (ADR-0004 spirit).
+  upsertSessionHeartbeat(db, {
+    sessionId: "folded",
+    path: "/fake/folded.jsonl",
+    heartbeatMs: 2000,
+    parentSessionId: null,
+    modelClass: "sonnet",
+  });
+  const row = getSession(db, "folded");
+  db.close();
+
+  assert.strictEqual(
+    row?.modelClass,
+    "opus",
+    "the folded class is not regressed",
+  );
+  assert.strictEqual(row?.heartbeatMs, 2000, "the heartbeat still lands");
+});
+
 test("live counting is independent of month — an across-rollover session still counts live", () => {
   const db = openDb(":memory:");
   const now = Date.UTC(2026, 6, 1, 0, 1, 0);

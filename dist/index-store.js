@@ -385,7 +385,7 @@ function resolveLimits(db, observation) {
         sevenDay: resolve("seven_day", observation.sevenDay),
     };
 }
-export async function updateIndex(indexPath, claudeDir, pricingTable, observation, activeTranscriptPath, heartbeatAt) {
+export async function updateIndex(indexPath, claudeDir, pricingTable, observation, activeTranscriptPath, heartbeatAt, activeModelClass) {
     const db = openDb(indexPath);
     // H1 sweep debounce (Discussion #63). The full cross-project sweep is O(all
     // transcripts) of stat + SQL on every refreshInterval tick, almost always to
@@ -434,6 +434,11 @@ export async function updateIndex(indexPath, claudeDir, pricingTable, observatio
                     path: activeTranscriptPath,
                     heartbeatMs: heartbeatAt,
                     parentSessionId: null,
+                    // "unknown" is left NULL, not persisted: a sticky "unknown" would block
+                    // COALESCE from ever filling the real class on a later tick.
+                    modelClass: activeModelClass !== undefined && activeModelClass !== "unknown"
+                        ? activeModelClass
+                        : null,
                 })) {
                 heartbeatCount += 1;
             }
