@@ -12,8 +12,15 @@ From the next release onward, entries below are generated from
 
 ### Bug Fixes
 
-* name heartbeat-surfaced sessions in the live roster instead of "unknown" ([e4dff82](https://github.com/dezeat/claude-usage-meter/commit/e4dff8207d23906511ce7375b103cc6d0472c526))
+* price `claude-sonnet-5` at the standard Sonnet rate — a Sonnet 5 session previously priced to $0 and was excluded from the total ([4ff0ba8](https://github.com/dezeat/claude-usage-meter/commit/4ff0ba8e6102d5c93a5aba890d0505c3b7b1c3aa))
 * name heartbeat-surfaced sessions in the live roster instead of "unknown" ([72250f7](https://github.com/dezeat/claude-usage-meter/commit/72250f7f582f75ab0268b478193d93c760687e49))
+
+
+### Documentation
+
+* refresh the README hero image to match the live statusline layout ([94a7e8f](https://github.com/dezeat/claude-usage-meter/commit/94a7e8fc489c5d5efef948242d38479120eb895b))
+* explain live refresh and cross-session sync in the README ([4cce817](https://github.com/dezeat/claude-usage-meter/commit/4cce8172e7e75852f8c78c20d94af42b4456b9b9))
+* trim the Roadmap section to a project-board reference ([a0134d3](https://github.com/dezeat/claude-usage-meter/commit/a0134d333736f4e75eb678dafb775c1cabd96f47))
 
 ## [1.1.2](https://github.com/dezeat/claude-usage-meter/compare/v1.1.1...v1.1.2) (2026-07-20)
 
