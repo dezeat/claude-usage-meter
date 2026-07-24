@@ -1,8 +1,8 @@
 ---
-name: Ticket
+name: Task
 about: A single, independently mergeable unit of work
-title: "[Ticket] "
-labels: ticket
+title: "[Task] "
+labels: task
 ---
 
 ## What & why
