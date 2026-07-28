@@ -30,8 +30,9 @@ export interface CostByModel {
 // hand. Keys are dateless aliases — normalizeModelId() strips the -YYYYMMDD
 // snapshot suffix that pre-4.6 transcripts carry, so one entry prices both forms.
 export const DEFAULT_PRICING: PricingTable = {
-  asOf: "2026-07-22",
+  asOf: "2026-07-28",
   rates: {
+    "claude-opus-5": opus(),
     "claude-opus-4-8": opus(),
     "claude-opus-4-7": opus(),
     "claude-opus-4-6": opus(),
