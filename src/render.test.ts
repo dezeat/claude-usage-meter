@@ -51,6 +51,9 @@ function populatedIndex(): CrossSessionIndex {
     byMonth: { [MONTH]: { tokens: {}, costUsd: 3.45 } },
     byBranch: {},
     updatedAt: NOW_MS,
+    // The store's windowed spend delta for the active session (#101): the whole
+    // $3.45 accrued across a 23-minute span.
+    activeSpendWindow: { deltaUsd: 3.45, spanMs: 1_380_000 },
   };
 }
 
@@ -198,7 +201,8 @@ test("an absent resolved window falls back to the payload's own snapshot", () =>
 
 test("the spend row leads with the live ses cost and burn, a cache% cell, then a dim Σ ledger", () => {
   const spend = fullRender(false).split("\n")[2] ?? "";
-  // ses $3.45 with a 1380000ms duration burns 3.45/(1380000/3.6e6) = $9.00/hr.
+  // A $3.45 window delta across a 1380000ms span burns 3.45/(1380000/3.6e6) =
+  // $9.00/hr (#101).
   assert.match(spend, /ses \$3\.45 ↑\$9\.00\/hr/);
   // The session's 1.2M tokens carry zero cache reads → a 0% cache signal.
   assert.match(spend, /0% cached/);
