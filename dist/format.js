@@ -66,3 +66,23 @@ export function burnRate(costUsd, durationMs) {
         return undefined;
     return costUsd / (durationMs / 3_600_000);
 }
+// The trailing window the live ↑$/hr cue is computed over (#101). An hour
+// matches the /hr unit the cue prints — "you spent $X over the last hour" — and
+// smooths agentic burst-and-think spend enough that the figure is a pace, not a
+// seismograph. (ccusage's alternative frame, the active 5h billing block, is
+// laggier still; a shorter window reads livelier but jumps with every burst.)
+export const BURN_WINDOW_MS = 3_600_000;
+// A span shorter than this is an anecdote, not a rate: it is the early-session
+// case where 20s and $0.40 printed an alarming ↑$72/hr lifetime average.
+export const MIN_RATE_SPAN_MS = 60_000;
+// The windowed rate: dollars/hour from a spend delta across its span. Suppressed
+// (undefined) below the minimum span, and burnRate's own non-positive-cost guard
+// makes an idle window — nothing spent across it — omit the cue instead of
+// pinning it at the last burst divided forever. Also serves the no-store
+// degraded path with (lifetime cost, lifetime duration), where the minimum-span
+// floor is the only mitigation available.
+export function liveRate(deltaUsd, spanMs) {
+    if (!Number.isFinite(spanMs) || spanMs < MIN_RATE_SPAN_MS)
+        return undefined;
+    return burnRate(deltaUsd, spanMs);
+}

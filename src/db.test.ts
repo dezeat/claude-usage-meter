@@ -21,6 +21,9 @@ import {
   setMeta,
   countSessionsByClassForMonth,
   countLiveSessionsByClass,
+  recordSpendSample,
+  spendWindowDelta,
+  SPEND_SAMPLE_BUCKET_MS,
   type SessionRow,
 } from "./db.js";
 import { DEFAULT_PRICING } from "./pricing.js";
@@ -819,7 +822,7 @@ test("opening an existing v3 store migrates it to v4 in place, adding the meta t
   db.close();
 });
 
-test("opening an existing v4 store migrates it to v5 with a nullable heartbeat and preserves rows", () => {
+test("opening an existing v4 store walks the ladder to the current version with a nullable heartbeat and preserves rows", () => {
   const tmp = makeTmpDir();
   const dbPath = join(tmp, "v4.db");
   const v4 = new DatabaseSync(dbPath);
@@ -858,7 +861,7 @@ test("opening an existing v4 store migrates it to v5 with a nullable heartbeat a
     heartbeat_ms: number | null;
   };
 
-  assert.strictEqual(schemaVersion(db), 5);
+  assert.strictEqual(schemaVersion(db), SCHEMA_VERSION);
   assert.ok(columns.some((column) => column.name === "heartbeat_ms"));
   assert.strictEqual(row.session_id, "kept");
   assert.strictEqual(row.byte_offset, 17);
@@ -906,4 +909,78 @@ test("an in-memory DatabaseSync store upserts and reads back a session row", () 
     .get("s1") as { byte_offset: number };
   assert.equal(row.byte_offset, 123);
   db.close();
+});
+
+// ---------------------------------------------------------------------------
+// The spend sample ring behind the windowed burn rate (#101).
+// ---------------------------------------------------------------------------
+
+test("spend samples coarsen to a bucket where the last tick wins, and the prune drops dead rows", () => {
+  const db = openDb(":memory:");
+  const retain = 7_200_000;
+
+  // Two ticks inside one 30s bucket: REPLACE keeps the fresher cumulative cost.
+  recordSpendSample(db, "s", 10_000, 1.0, retain);
+  recordSpendSample(db, "s", 20_000, 1.5, retain);
+  const rows = db
+    .prepare(
+      "SELECT bucket_ms, cost_usd FROM spend_samples WHERE session_id = ?",
+    )
+    .all("s") as unknown as Array<{ bucket_ms: number; cost_usd: number }>;
+  assert.strictEqual(rows.length, 1, "one row per bucket");
+  assert.strictEqual(rows[0]?.bucket_ms, 0, "10s and 20s share the 0 bucket");
+  assert.strictEqual(rows[0]?.cost_usd, 1.5, "the later tick wins the bucket");
+
+  // A much later tick prunes everything past the retention horizon — including
+  // another session's dead rows, which will never tick again themselves.
+  recordSpendSample(db, "closed", 30_000, 9.9, retain);
+  recordSpendSample(db, "s", 10 * retain, 2.0, retain);
+  const kept = db
+    .prepare("SELECT session_id FROM spend_samples ORDER BY session_id")
+    .all() as unknown as Array<{ session_id: string }>;
+  assert.deepStrictEqual(
+    kept.map((r) => r.session_id),
+    ["s"],
+    "only the fresh sample survives the horizon",
+  );
+  db.close();
+});
+
+test("spendWindowDelta baselines on the newest sample at or before the window edge (hand-computed)", () => {
+  const db = openDb(":memory:");
+  const HOUR = 3_600_000;
+  // Cumulative history: $0 at t=0, $2 at t=30min. Now t=90min, $3 total.
+  recordSpendSample(db, "s", 0, 0, 10 * HOUR);
+  recordSpendSample(db, "s", 30 * 60_000, 2, 10 * HOUR);
+  // Window edge is t=30min → baseline is the $2 sample there: the session spent
+  // $3 - $2 = $1 across the trailing hour.
+  assert.deepStrictEqual(spendWindowDelta(db, "s", 90 * 60_000, HOUR, 3), {
+    deltaUsd: 1,
+    spanMs: HOUR,
+  });
+  db.close();
+});
+
+test("a session younger than the window falls back to its oldest sample, and no samples yield undefined", () => {
+  const db = openDb(":memory:");
+  const HOUR = 3_600_000;
+  // First-ever sample already carries $1 — spend predating the ring never
+  // inflates the delta.
+  recordSpendSample(db, "s", 0, 1, 10 * HOUR);
+  assert.deepStrictEqual(spendWindowDelta(db, "s", 10 * 60_000, HOUR, 4), {
+    deltaUsd: 3,
+    spanMs: 10 * 60_000,
+  });
+  assert.strictEqual(
+    spendWindowDelta(db, "unsampled", 10 * 60_000, HOUR, 4),
+    undefined,
+  );
+  db.close();
+});
+
+test("the sample bucket divides the retention and window arithmetic cleanly", () => {
+  // Guard the constant's contract: a bucket must be a positive divisor-friendly
+  // coarsening, or the hand-computed fixtures above stop matching real buckets.
+  assert.ok(SPEND_SAMPLE_BUCKET_MS > 0);
+  assert.strictEqual(3_600_000 % SPEND_SAMPLE_BUCKET_MS, 0);
 });
