@@ -460,7 +460,7 @@ export interface SessionHeartbeat {
 // Insert a minimal top-level row on its first statusline tick, or stamp an
 // existing top-level row's heartbeat. This makes joins visible before a transcript
 // has a complete line. The model class rides along so the live roster names the
-// session (`● opus 1`) instead of `● unknown 1` before its transcript folds; the
+// session (`● 1 opus`) instead of `● 1 unknown` before its transcript folds; the
 // COALESCE fills it only while still NULL, so a transcript-derived class — which is
 // authoritative — is never regressed by a later heartbeat. The conflict arm stays
 // monotonic on the heartbeat and leaves every other transcript column untouched.

@@ -23,7 +23,7 @@ function rows(): LineRow[] {
     ],
     [
       { text: "3 Σ 7", priority: 2 },
-      { text: "● opus 2 ● sonnet 1", reduced: "●3", priority: 6 },
+      { text: "● 2 opus ● 1 sonnet", reduced: "●3", priority: 6 },
     ],
   ];
 }
@@ -43,7 +43,7 @@ test("a wide budget keeps every segment intact", () => {
   assert.ok(out.includes("⟳ 2h"), "reset trail survives when it fits");
   assert.ok(out.includes("0% cached"), "cache cell survives");
   assert.ok(out.includes("Σ $12.00 mo"), "month ledger survives");
-  assert.ok(out.includes("● opus 2"), "full roster survives");
+  assert.ok(out.includes("● 2 opus"), "full roster survives");
 });
 
 for (const columns of [80, 60, 40, 20, 10, 3, 1]) {
@@ -66,7 +66,7 @@ test("the dim static month ledger sheds before the live reset trail (ADR-0007 or
 test("the roster collapses to a bare ●N count rather than vanishing", () => {
   // Narrow enough to shed through priority 6 but keep the load-bearing cells.
   const out = assembleLine(rows(), 30, false);
-  assert.ok(!out.includes("● opus 2"), "the verbose roster is shed");
+  assert.ok(!out.includes("● 2 opus"), "the verbose roster is shed");
 });
 
 test("empty rows leave no dangling divider", () => {
