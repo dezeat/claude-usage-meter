@@ -404,7 +404,7 @@ test("the count cell is the active-class month count Σ month total, plus an act
     JUN_NOW_MS,
     false,
   );
-  assert.deepStrictEqual(cells, ["2 Σ 3", "● opus 1 ● sonnet 1"]);
+  assert.deepStrictEqual(cells, ["2 Σ 3", "● 1 opus ● 1 sonnet"]);
 });
 
 test("a fresh single-session fixture renders the month count, never an all-time total", () => {
@@ -434,7 +434,7 @@ test("a fresh single-session fixture renders the month count, never an all-time 
 });
 
 test("the live active tally self-excludes the current session", () => {
-  // Two live opus, one of them the current session → renders opus 1.
+  // Two live opus, one of them the current session → renders 1 opus.
   const twoLiveOpus = makeIndex(
     [
       { modelClass: "opus", lastTs: JUN_LIVE_TS, costUsd: 1.0 },
@@ -450,7 +450,7 @@ test("the live active tally self-excludes the current session", () => {
     false,
     "session-0",
   );
-  assert.deepStrictEqual(cells, ["2 Σ 2", "● opus 1"]);
+  assert.deepStrictEqual(cells, ["2 Σ 2", "● 1 opus"]);
 });
 
 test("the active cell is dropped when the current session is the only live one", () => {
@@ -558,7 +558,7 @@ test("block and HUD self-exclude by transcript when session_id is absent or disa
       false,
       session,
     );
-    assert.deepStrictEqual(block.fleetCells, ["1 Σ 2", "● sonnet 1"]);
+    assert.deepStrictEqual(block.fleetCells, ["1 Σ 2", "● 1 sonnet"]);
 
     const hud = fleetLineSegments(
       index,
@@ -598,7 +598,7 @@ test("block and HUD both honor the refresh-derived liveness window", () => {
     {},
     windowMs,
   );
-  assert.deepStrictEqual(block.fleetCells, ["0 Σ 1", "● opus 1"]);
+  assert.deepStrictEqual(block.fleetCells, ["0 Σ 1", "● 1 opus"]);
 
   const hud = fleetLineSegments(
     index,

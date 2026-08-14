@@ -38,7 +38,7 @@
 
   <text x="28" y="138" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$3.45</tspan><tspan class="accent"> ↑</tspan><tspan class="bright">$4.10</tspan><tspan class="dim">/hr · </tspan><tspan class="bright">96%</tspan><tspan class="dim"> cached · Σ $235.92 mo</tspan></text>
 
-  <text x="28" y="168" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">4</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">8</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> opus 3</tspan><tspan class="green"> ●</tspan><tspan class="bright"> fable 2</tspan><tspan class="green"> ●</tspan><tspan class="bright"> sonnet 2</tspan></text>
+  <text x="28" y="168" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">4</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">8</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> 3 opus</tspan><tspan class="green"> ●</tspan><tspan class="bright"> 2 fable</tspan><tspan class="green"> ●</tspan><tspan class="bright"> 2 sonnet</tspan></text>
 
   <text x="28" y="197" class="dim" font-size="12" xml:space="preserve">no network · reads stdin + local transcripts · numbers illustrative</text>
 </svg>

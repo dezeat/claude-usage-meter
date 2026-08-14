@@ -44,7 +44,7 @@
 
     <text x="54" y="202" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$2.14</tspan><tspan class="dim"> · Σ $246.80 mo</tspan></text>
 
-    <text x="54" y="228" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">6</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">11</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> opus 2</tspan></text>
+    <text x="54" y="228" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">6</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">11</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> 2 opus</tspan></text>
 
     <text x="54" y="262" xml:space="preserve"><tspan class="claude">⏵⏵ auto mode on</tspan><tspan class="dim"> (shift+tab to cycle) · ← for agents</tspan></text>
   </g>

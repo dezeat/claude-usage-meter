@@ -19,7 +19,7 @@ export const DROP = {
 
 // One painted field in the single-line HUD. `text` is its full form; `reduced`,
 // when set, is a shorter painted form the shedder swaps in at `priority` instead
-// of removing the whole cell (the roster's `● opus 1` → bare `●3`). A segment
+// of removing the whole cell (the roster's `● 1 opus` → bare `●3`). A segment
 // with no `priority` is load-bearing and never shed (the model, the repo name).
 export interface LineSegment {
   text: string;
