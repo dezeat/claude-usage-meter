@@ -99,10 +99,10 @@ different cadence. Run both.
 - **`<n> Σ <total>`** — the active class's sessions **this month**, a dim `Σ`
   connective, then the **month total** across every class. The `current` row
   already names the active model, so this count cell carries no self-tag.
-- **Live roster** — `● <class> <n> …`, the other sessions live right now per
+- **Live roster** — `● <n> <class> …`, the other sessions live right now per
   class, named by their real class and **excluding the one you're in**. A green
   `●` leads each live class; the roster is dropped when nothing else is live. The
-  `block` layout spells the class out (`● opus 3`); the single-line HUD abbreviates
+  `block` layout spells the class out (`● 3 opus`); the single-line HUD abbreviates
   it to the class initial with the count in parens (`●o(3)`) to stay on one line.
   Live status is heartbeat-first, with transcript activity as a fallback for
   legacy rows; the default 30-second window spans three default refresh ticks.

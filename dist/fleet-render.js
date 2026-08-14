@@ -47,7 +47,7 @@ export function monthClassCounts(sessions, month) {
 // Independent of month scope: a session active across a month
 // boundary still counts here. excludeSessionId drops the current session so the
 // live tally reads "besides you" — two live opus, one of them this session,
-// renders opus 1.
+// renders 1 opus.
 export function liveClassCounts(sessions, nowMs, excludeSessionId, windowMs = LIVENESS_WINDOW_MS) {
     const counts = new Map();
     for (const rec of Object.values(sessions)) {
@@ -69,7 +69,7 @@ export function liveClassCounts(sessions, nowMs, excludeSessionId, windowMs = LI
 // spend row); the two counts are bright. The current row already names the active
 // model, so the count cell carries no self-tag. Followed, only when another
 // session is live, by a roster cell tallying live sessions per class as
-// `● <class> <n> …`. The current session is excluded from the live tally (it is
+// `● <n> <class> …`. The current session is excluded from the live tally (it is
 // "besides you"), so the roster cell vanishes when nothing else is live.
 // The `<current> Σ <total>` count cell: the active class's month count, a dim Σ
 // connective, then the month grand total. Shared by the block roster and the
@@ -79,10 +79,10 @@ function countCell(monthCounts, currentClass, color) {
     const current = monthCounts.find((c) => c.cls === currentClass)?.count ?? 0;
     return `${paint(`${current}`, "brightWhite", color)} ${paint("Σ", "dim", color)} ${paint(`${total}`, "brightWhite", color)}`;
 }
-// The live roster: `● <class> <n>` per live class, space-joined.
+// The live roster: `● <n> <class>` per live class, space-joined.
 function rosterCell(live, color) {
     return live
-        .map((c) => `${paint("●", "green", color)} ${paint(`${c.cls} ${c.count}`, "brightWhite", color)}`)
+        .map((c) => `${paint("●", "green", color)} ${paint(`${c.count} ${c.cls}`, "brightWhite", color)}`)
         .join(" ");
 }
 // The HUD's compact roster: `●<c>(<n>)` per live class — the width-bound one-line
