@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.2.0](https://github.com/dezeat/claude-usage-meter/compare/v1.1.3...v1.2.0) (2026-08-14)
+
+
+### Features
+
+* count-first live roster (● 1 fable) ([#151](https://github.com/dezeat/claude-usage-meter/issues/151)) ([6ba1626](https://github.com/dezeat/claude-usage-meter/commit/6ba1626e95ca4a17e7c25d42804e5a1d49920691))
+* **skills:** add the scout prior-art / landscape-scan skill ([6d210c8](https://github.com/dezeat/claude-usage-meter/commit/6d210c8fe2e2e818b05bc1eb26b5eb6dbc02f177))
+
+
+### Bug Fixes
+
+* price claude-opus-5 ([032b253](https://github.com/dezeat/claude-usage-meter/commit/032b25372bbc7b7b974926503a6ede2a65c02876))
+* price claude-opus-5 ([554c0e4](https://github.com/dezeat/claude-usage-meter/commit/554c0e4e44e26d2ff754bd47f0caa8acb7328ee0)), closes [#142](https://github.com/dezeat/claude-usage-meter/issues/142)
+
+
+### Refactoring
+
+* hierarchy tier ticket → task ([076a677](https://github.com/dezeat/claude-usage-meter/commit/076a677a2c1ebdf113cf0c67032b45b93af168a0))
+* remove old ticket template ([2e41be2](https://github.com/dezeat/claude-usage-meter/commit/2e41be284787377df895132e8fecbaca2503a75e))
+* rename hierarchy tier ticket → task ([567c279](https://github.com/dezeat/claude-usage-meter/commit/567c279d2678e16564a3716a5d99637873f05fe7))
+* rename ticket template → task ([58b4179](https://github.com/dezeat/claude-usage-meter/commit/58b4179f49ee3419825055031fa1a8e1239197e6))
+
 ## [1.1.3](https://github.com/dezeat/claude-usage-meter/compare/v1.1.2...v1.1.3) (2026-07-22)
 
 
