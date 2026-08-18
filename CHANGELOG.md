@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.2.1](https://github.com/dezeat/claude-usage-meter/compare/v1.2.0...v1.2.1) (2026-08-18)
+
+
+### Bug Fixes
+
+* use null-prototype maps for externally-keyed accumulators ([5150d42](https://github.com/dezeat/claude-usage-meter/commit/5150d42e2a8cd50f1dd20abaa178efadd3e8d520)), closes [#156](https://github.com/dezeat/claude-usage-meter/issues/156)
+
 ## [1.2.0](https://github.com/dezeat/claude-usage-meter/compare/v1.1.3...v1.2.0) (2026-08-18)
 
 
