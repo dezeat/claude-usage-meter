@@ -351,9 +351,14 @@ whole — one row keeps:
 
 - the **four-way token split** — input / output / cache-read / cache-create —
   **per model id**;
-- the priced **cost**, **model class**, and **git branch**;
-- the **month**, **last-activity timestamp**, and **machine id**;
+- the priced **cost** and **model class**;
+- the **project path** and **git branch** the session ran in;
+- the **month**, **last-activity timestamp**, and refresh **heartbeat**;
 - the **subagent→parent** link.
+
+No prompt text, no message content, and no machine identifier are ever stored. The
+store reserves a `machine_id` column for a possible future cross-machine collector
+and writes `NULL` to it on every row.
 
 The statusline shows a compact summary of this; the
 [off-session report](#off-session-report) prints the full breakdown, and a
