@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "claude-usage-meter",
   "displayName": "Claude Usage Meter",
-  "description": "Live Claude Code usage meter: 5h/7d limit pace bars in the statusline, cost-forward spend, a cross-session fleet view, and a per-model cost summary after each task. Reads the statusline rate_limits payload and local session transcripts; no network calls.",
+  "description": "Live usage and cost for Claude Code: 5h/7d limit pace bars, cost-forward spend, and a cross-session fleet view of every session you have running — plus a per-model cost summary after each task. No network, no telemetry, zero runtime dependencies.",
   "version": "1.2.1",
   "author": {
     "name": "dezeat"
@@ -11,10 +11,14 @@
   "repository": "https://github.com/dezeat/claude-usage-meter",
   "license": "MIT",
   "keywords": [
+    "claude-code",
+    "claude-code-plugin",
+    "claude",
     "statusline",
     "usage",
     "cost",
     "rate-limits",
+    "token-usage",
     "observability"
   ]
 }
