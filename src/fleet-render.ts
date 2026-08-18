@@ -1,5 +1,5 @@
 import { paint } from "./ansi.js";
-import { burnRate, cacheReadShare, formatUsd, sumUsage } from "./format.js";
+import { cacheReadShare, formatUsd, liveRate, sumUsage } from "./format.js";
 import {
   type ClassCount,
   type CrossSessionIndex,
@@ -170,14 +170,14 @@ export function renderMonthly(
   return paint(`Σ ${formatUsd(spend.total.costUsd)} mo`, "dim", color);
 }
 
-// The live session spend cell: dim `ses` · bright `$cost`, then — when a burn
-// rate is known (a positive duration) — an accent `↑`, the bright `$rate`, and a
+// The live session spend cell: dim `ses` · bright `$cost`, then — when a
+// windowed burn rate is known (#101) — an accent `↑`, the bright `$rate`, and a
 // dim `/hr`. The token trail is gone (ADR-0006); the cache-read share now carries
 // the efficiency signal in its own cell. Live figures are bright; the `/hr` unit
 // recedes.
 export function sesCell(
   costUsd: number,
-  durationMs: number | undefined,
+  ratePerHour: number | undefined,
   color: boolean,
 ): string {
   const cell = `${paint("ses", "dim", color)} ${paint(
@@ -185,11 +185,9 @@ export function sesCell(
     "brightWhite",
     color,
   )}`;
-  const rate =
-    durationMs === undefined ? undefined : burnRate(costUsd, durationMs);
-  if (rate === undefined) return cell;
+  if (ratePerHour === undefined) return cell;
   return `${cell} ${paint("↑", "accent", color)}${paint(
-    formatUsd(rate),
+    formatUsd(ratePerHour),
     "brightWhite",
     color,
   )}${paint("/hr", "dim", color)}`;
@@ -273,7 +271,6 @@ interface SpendPair {
 function renderSpend(
   index: CrossSessionIndex,
   sessionCostUsd: number | undefined,
-  durationMs: number | undefined,
   session: SessionRef,
   color: boolean,
 ): SpendPair {
@@ -282,6 +279,18 @@ function renderSpend(
     session.sessionId,
     session.transcriptPath,
   );
+  // The windowed burn rate (#101): the store's sample ring yields the spend
+  // delta across the trailing hour, and liveRate turns it into ↑$/hr or
+  // suppresses it (span too short, nothing spent). No sample history — first
+  // tick, skeletal row — omits the cue rather than degrading to the misleading
+  // lifetime average.
+  const rate =
+    index.activeSpendWindow === undefined
+      ? undefined
+      : liveRate(
+          index.activeSpendWindow.deltaUsd,
+          index.activeSpendWindow.spanMs,
+        );
   // The two-cost-source rule (ADR-0004): when the session has transcript data in
   // the store its pricing-table cost is authoritative (the branch below), and its
   // own tokens yield the cache% cell. A missing transcript — including a
@@ -289,13 +298,13 @@ function renderSpend(
   // `cost.total_cost_usd`, which carries no tokens (no cache cell).
   if (totals !== undefined) {
     return {
-      ses: sesCell(totals.costUsd, durationMs, color),
+      ses: sesCell(totals.costUsd, rate, color),
       share: cacheReadShare(sumUsage(totals.tokens)),
     };
   }
   if (sessionCostUsd !== undefined) {
     return {
-      ses: sesCell(sessionCostUsd, durationMs, color),
+      ses: sesCell(sessionCostUsd, rate, color),
       share: undefined,
     };
   }
@@ -309,8 +318,9 @@ export interface FleetCells {
 
 // The spend and fleet row cells (board section 1), already painted but WITHOUT
 // field separators — the line assembler joins them with the shared dot
-// separator. spendCells = the live `ses` cell (with burn rate when a duration is
-// known; omitted when neither tokens nor a session cost is available), the
+// separator. spendCells = the live `ses` cell (with the windowed burn rate when
+// the store has sample history for the session, #101; the cell itself is omitted
+// when neither tokens nor a session cost is available), the
 // cache% cell (only when the session's tokens are known), and the dim Σ month
 // ledger. fleetCells come from the roster. The current session is threaded
 // through so the live roster tally excludes it.
@@ -319,7 +329,6 @@ export function renderFleet(
   indexPath: string,
   currentClass: string,
   sessionCostUsd: number | undefined,
-  durationMs: number | undefined,
   month: string,
   nowMs: number,
   color: boolean,
@@ -327,13 +336,7 @@ export function renderFleet(
   windowMs = LIVENESS_WINDOW_MS,
 ): FleetCells {
   const total = renderMonthly(indexPath, month, color);
-  const { ses, share } = renderSpend(
-    index,
-    sessionCostUsd,
-    durationMs,
-    session,
-    color,
-  );
+  const { ses, share } = renderSpend(index, sessionCostUsd, session, color);
 
   const spendCells: string[] = [];
   if (ses !== "") spendCells.push(ses);
@@ -364,7 +367,6 @@ export function fleetLineSegments(
   indexPath: string,
   currentClass: string,
   sessionCostUsd: number | undefined,
-  durationMs: number | undefined,
   month: string,
   nowMs: number,
   color: boolean,
@@ -372,13 +374,7 @@ export function fleetLineSegments(
   windowMs = LIVENESS_WINDOW_MS,
 ): { spend: LineSegment[]; fleet: LineSegment[] } {
   const total = renderMonthly(indexPath, month, color);
-  const { ses, share } = renderSpend(
-    index,
-    sessionCostUsd,
-    durationMs,
-    session,
-    color,
-  );
+  const { ses, share } = renderSpend(index, sessionCostUsd, session, color);
 
   const spend: LineSegment[] = [];
   if (ses !== "") spend.push({ text: ses });

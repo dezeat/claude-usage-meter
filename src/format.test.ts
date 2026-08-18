@@ -6,6 +6,8 @@ import {
   burnRate,
   cacheReadShare,
   formatUsd,
+  liveRate,
+  MIN_RATE_SPAN_MS,
   sumUsage,
   tokenBreakdown,
 } from "./format.js";
@@ -68,6 +70,25 @@ test("the burn rate is undefined for a zero cost, so a $0 session omits a noise 
   // is $0.00/hr — signal-free, so it is omitted like the zero-duration case.
   assert.strictEqual(burnRate(0, 1_800_000), undefined);
   assert.strictEqual(burnRate(-1, 1_800_000), undefined);
+});
+
+test("liveRate turns a window delta into dollars per hour (hand-computed)", () => {
+  // $0.50 accrued across 30 min paces to $0.50 / 0.5 h = $1.00/hr.
+  assert.ok(Math.abs((liveRate(0.5, 1_800_000) ?? NaN) - 1.0) < 1e-9);
+  // Exactly the minimum span is a rate: $0.40 / (1/60 h) = $24.00/hr.
+  assert.strictEqual(liveRate(0.4, MIN_RATE_SPAN_MS), 24);
+});
+
+test("liveRate suppresses a span shorter than a minute — the early-session spike case (#101)", () => {
+  // 20s and $0.40 used to print an alarming ↑$72.00/hr lifetime average; a span
+  // this short is an anecdote, not a rate, so the cue is omitted.
+  assert.strictEqual(liveRate(0.4, 20_000), undefined);
+  assert.strictEqual(liveRate(0.4, Number.NaN), undefined);
+});
+
+test("liveRate omits an idle window — nothing spent across it is no rate, not a pinned figure", () => {
+  assert.strictEqual(liveRate(0, 3_600_000), undefined);
+  assert.strictEqual(liveRate(-0.01, 3_600_000), undefined);
 });
 
 test("summing a per-model token map adds each of the four kinds independently", () => {

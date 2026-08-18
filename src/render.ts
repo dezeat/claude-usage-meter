@@ -10,6 +10,7 @@ import {
   paceBar,
 } from "./bars.js";
 import { fleetLineSegments, renderFleet, sesCell } from "./fleet-render.js";
+import { liveRate } from "./format.js";
 import {
   type CrossSessionIndex,
   type ResolvedLimits,
@@ -64,6 +65,16 @@ interface RenderOptions {
   // Heartbeat expiry window resolved from the statusline refresh cadence at the
   // edge. Undefined keeps the pure renderer's three-default-ticks policy.
   livenessWindowMs?: number;
+}
+
+// The no-store burn cue (#101): without the sample ring there is nothing to
+// window over, so the payload's lifetime cost/duration pair is the only rate
+// available. liveRate's minimum-span floor still applies, killing the
+// early-session ↑$72/hr spike this degraded path used to print.
+function fallbackRate(payload: ParsedPayload): number | undefined {
+  if (payload.costUsd === undefined || payload.durationMs === undefined)
+    return undefined;
+  return liveRate(payload.costUsd, payload.durationMs);
 }
 
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
@@ -327,7 +338,6 @@ function renderHud(
       options.indexPath ?? "",
       activeClass(payload),
       payload.costUsd,
-      payload.durationMs,
       month,
       now.getTime(),
       color,
@@ -336,7 +346,9 @@ function renderHud(
     );
     rows.push(spend, fleet);
   } else if (payload.costUsd !== undefined) {
-    rows.push([{ text: sesCell(payload.costUsd, payload.durationMs, color) }]);
+    rows.push([
+      { text: sesCell(payload.costUsd, fallbackRate(payload), color) },
+    ]);
   }
 
   const line = assembleLine(rows, options.columns ?? Infinity, color);
@@ -381,7 +393,6 @@ export function renderLine(
       options.indexPath ?? "",
       activeClass(payload),
       payload.costUsd,
-      payload.durationMs,
       month,
       now.getTime(),
       color,
@@ -395,9 +406,9 @@ export function renderLine(
   } else if (payload.costUsd !== undefined) {
     // No store this render: the payload cost is the live session's authority
     // (ADR-0004), cost-only (no token totals available without the index, so no
-    // cache% cell). The burn rate still renders when the payload carries a
-    // duration.
-    const ses = sesCell(payload.costUsd, payload.durationMs, color);
+    // cache% cell). With no sample ring available either, the burn cue degrades
+    // to the lifetime average behind liveRate's minimum-span floor (#101).
+    const ses = sesCell(payload.costUsd, fallbackRate(payload), color);
     rows.push(labelled("spend", ses, color));
   }
 

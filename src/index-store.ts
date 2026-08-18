@@ -2,7 +2,7 @@ import { readFileSync, statSync, readdirSync, type Dirent } from "node:fs";
 import { join, basename, dirname } from "node:path";
 
 import { aggregateTranscript, type ModelUsage } from "./aggregate.js";
-import { sumUsage } from "./format.js";
+import { BURN_WINDOW_MS, sumUsage } from "./format.js";
 import { cost, type PricingTable } from "./pricing.js";
 import {
   openDb,
@@ -17,8 +17,11 @@ import {
   countLiveSessionsByClass,
   monthClassSpendRows,
   upsertSessionHeartbeat,
+  recordSpendSample,
+  spendWindowDelta,
   type SessionRow,
   type LimitWindowKind,
+  type SpendWindow,
 } from "./db.js";
 import { type RateWindow } from "./payload.js";
 
@@ -77,6 +80,11 @@ export interface CrossSessionIndex {
   // edge while the db handle is open (Discussion #63, Part 1). Absent for the
   // report path (materializeIndex), which has no statusline limits row to draw.
   limits?: ResolvedLimits;
+  // The active session's spend delta across the trailing burn window (#101),
+  // resolved at the edge like limits. Absent when the session has no sample
+  // history yet (first tick, skeletal row) and for the report path — the ↑$/hr
+  // cue is then omitted rather than degraded to a lifetime average.
+  activeSpendWindow?: SpendWindow;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -595,6 +603,46 @@ export async function updateIndex(
 
   const index = materializeIndex(allSessions(db), Date.now());
   if (limits !== undefined) index.limits = limits;
+
+  // The active session's spend sample + windowed delta (#101), computed off the
+  // materialized index so the sampled series is the same rolled-up figure the
+  // ses cell displays (sessionTotals folds subagent children in, ADR-0002).
+  // Failure-isolated like the heartbeat: a contended tick omits the burn cue,
+  // it cannot blank the statusline.
+  if (
+    activeTranscriptPath !== undefined &&
+    heartbeatAt !== undefined &&
+    Number.isFinite(heartbeatAt) &&
+    parentSessionIdOf(activeTranscriptPath) === undefined
+  ) {
+    try {
+      const sessionId = basename(activeTranscriptPath, ".jsonl");
+      const totals =
+        sessionId === ""
+          ? undefined
+          : sessionTotals(index, sessionId, activeTranscriptPath);
+      if (totals !== undefined && Number.isFinite(totals.costUsd)) {
+        recordSpendSample(
+          db,
+          sessionId,
+          heartbeatAt,
+          totals.costUsd,
+          2 * BURN_WINDOW_MS,
+        );
+        const window = spendWindowDelta(
+          db,
+          sessionId,
+          heartbeatAt,
+          BURN_WINDOW_MS,
+          totals.costUsd,
+        );
+        if (window !== undefined) index.activeSpendWindow = window;
+      }
+    } catch {
+      // Cue omitted this tick; the next tick records a fresh sample.
+    }
+  }
+
   db.close();
   return index;
 }
