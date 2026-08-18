@@ -11,6 +11,16 @@ updates:
     commit-message:
       prefix: chore
     groups:
+      # oxlint declares oxlint-tsgolint as a peer whose floor moves on oxlint's
+      # own minor bumps: 1.74.0 wants >=0.24.0, 1.78.0 wants >=7.0.2001. Ungrouped,
+      # oxlint's minor lands in the dev-dependencies batch while the peer's major
+      # arrives as its own PR, and the batch then fails `npm ci` with ERESOLVE
+      # until the other one merges (PR #139 vs #141). Group them across all update
+      # types so the coupled pair always moves in one PR — the same failure and the
+      # same fix as codeql-action below. Listed before dev-dependencies because a
+      # dependency joins the first group whose patterns match.
+      oxlint:
+        patterns: ["oxlint*"]
       dev-dependencies:
         patterns: ["*"]
         update-types: ["minor", "patch"]
