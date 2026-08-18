@@ -55,7 +55,7 @@ export function foldLines(existing, lines, seenKeys) {
     // line is counted exactly once regardless of how many incremental reads occur.
     let branch = existing?.branch ?? "";
     let lastTs = existing?.lastTs ?? 0;
-    const tokens = {};
+    const tokens = Object.create(null);
     if (existing) {
         mergeTokens(tokens, existing.tokens);
     }
@@ -250,18 +250,26 @@ function rowToRecord(row) {
 // need is opaque JSON in the store and cannot be summed in SQL; cost is folded
 // alongside it in the same pass.
 function materializeIndex(rows, updatedAt) {
-    const sessions = {};
-    const byMonth = {};
-    const byBranch = {};
+    // Null-prototype throughout: session ids, months and especially branch names are
+    // externally supplied keys. `git checkout -b __proto__` is legal, and on a plain
+    // object `byBranch["__proto__"] ??= …` reads Object.prototype, never assigns, and
+    // the merge below throws on the resulting undefined — silently killing the
+    // statusline (#156).
+    const sessions = Object.create(null);
+    const byMonth = Object.create(null);
+    const byBranch = Object.create(null);
     for (const row of rows) {
         sessions[row.sessionId] = rowToRecord(row);
         if (row.transcriptIndexed === false)
             continue;
         const month = row.month;
-        const mo = (byMonth[month] ??= { tokens: {}, costUsd: 0 });
+        const mo = (byMonth[month] ??= { tokens: Object.create(null), costUsd: 0 });
         mergeTokens(mo.tokens, row.tokens);
         mo.costUsd += row.costUsd;
-        const br = (byBranch[row.branch] ??= { tokens: {}, costUsd: 0 });
+        const br = (byBranch[row.branch] ??= {
+            tokens: Object.create(null),
+            costUsd: 0,
+        });
         mergeTokens(br.tokens, row.tokens);
         br.costUsd += row.costUsd;
     }
@@ -552,7 +560,7 @@ export function sessionTotals(index, sessionId, transcriptPath) {
     // Roll the session's subagents into its total (ADR-0002): a parent's spend
     // includes its children's tokens and cost. Returns a fresh merged object, never
     // the stored record's own token map.
-    const tokens = {};
+    const tokens = Object.create(null);
     mergeTokens(tokens, owner.tokens);
     let costUsd = owner.costUsd;
     for (const rec of Object.values(index.sessions)) {

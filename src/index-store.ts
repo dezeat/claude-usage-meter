@@ -152,7 +152,7 @@ export function foldLines(
 
   let branch = existing?.branch ?? "";
   let lastTs = existing?.lastTs ?? 0;
-  const tokens: Record<string, ModelUsage> = {};
+  const tokens: Record<string, ModelUsage> = Object.create(null);
 
   if (existing) {
     mergeTokens(tokens, existing.tokens);
@@ -359,20 +359,28 @@ function materializeIndex(
   rows: SessionRow[],
   updatedAt: number,
 ): CrossSessionIndex {
-  const sessions: Record<string, SessionRecord> = {};
-  const byMonth: CrossSessionIndex["byMonth"] = {};
-  const byBranch: CrossSessionIndex["byBranch"] = {};
+  // Null-prototype throughout: session ids, months and especially branch names are
+  // externally supplied keys. `git checkout -b __proto__` is legal, and on a plain
+  // object `byBranch["__proto__"] ??= …` reads Object.prototype, never assigns, and
+  // the merge below throws on the resulting undefined — silently killing the
+  // statusline (#156).
+  const sessions: Record<string, SessionRecord> = Object.create(null);
+  const byMonth: CrossSessionIndex["byMonth"] = Object.create(null);
+  const byBranch: CrossSessionIndex["byBranch"] = Object.create(null);
 
   for (const row of rows) {
     sessions[row.sessionId] = rowToRecord(row);
     if (row.transcriptIndexed === false) continue;
 
     const month = row.month;
-    const mo = (byMonth[month] ??= { tokens: {}, costUsd: 0 });
+    const mo = (byMonth[month] ??= { tokens: Object.create(null), costUsd: 0 });
     mergeTokens(mo.tokens, row.tokens);
     mo.costUsd += row.costUsd;
 
-    const br = (byBranch[row.branch] ??= { tokens: {}, costUsd: 0 });
+    const br = (byBranch[row.branch] ??= {
+      tokens: Object.create(null),
+      costUsd: 0,
+    });
     mergeTokens(br.tokens, row.tokens);
     br.costUsd += row.costUsd;
   }
@@ -743,7 +751,7 @@ export function sessionTotals(
   // Roll the session's subagents into its total (ADR-0002): a parent's spend
   // includes its children's tokens and cost. Returns a fresh merged object, never
   // the stored record's own token map.
-  const tokens: Record<string, ModelUsage> = {};
+  const tokens: Record<string, ModelUsage> = Object.create(null);
   mergeTokens(tokens, owner.tokens);
   let costUsd = owner.costUsd;
   for (const rec of Object.values(index.sessions)) {

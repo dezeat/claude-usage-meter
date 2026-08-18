@@ -275,7 +275,9 @@ function parseTokens(json: string | null): Record<string, ModelUsage> {
     return {};
   }
   if (typeof parsed !== "object" || parsed === null) return {};
-  const out: Record<string, ModelUsage> = {};
+  // Null-prototype: keys come from stored JSON, so `out.__proto__ = …` on a plain
+  // object would rewrite the object's prototype instead of adding a model (#156).
+  const out: Record<string, ModelUsage> = Object.create(null);
   for (const [model, usage] of Object.entries(
     parsed as Record<string, unknown>,
   )) {
