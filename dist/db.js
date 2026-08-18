@@ -209,7 +209,9 @@ function parseTokens(json) {
     }
     if (typeof parsed !== "object" || parsed === null)
         return {};
-    const out = {};
+    // Null-prototype: keys come from stored JSON, so `out.__proto__ = …` on a plain
+    // object would rewrite the object's prototype instead of adding a model (#156).
+    const out = Object.create(null);
     for (const [model, usage] of Object.entries(parsed)) {
         out[model] = asUsage(usage);
     }
