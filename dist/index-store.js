@@ -1,9 +1,9 @@
 import { readFileSync, statSync, readdirSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { aggregateTranscript } from "./aggregate.js";
-import { sumUsage } from "./format.js";
+import { BURN_WINDOW_MS, sumUsage } from "./format.js";
 import { cost } from "./pricing.js";
-import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, getMeta, setMeta, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, upsertSessionHeartbeat, } from "./db.js";
+import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, getMeta, setMeta, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, upsertSessionHeartbeat, recordSpendSample, spendWindowDelta, } from "./db.js";
 import {} from "./payload.js";
 function asRecord(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -451,6 +451,31 @@ export async function updateIndex(indexPath, claudeDir, pricingTable, observatio
     const index = materializeIndex(allSessions(db), Date.now());
     if (limits !== undefined)
         index.limits = limits;
+    // The active session's spend sample + windowed delta (#101), computed off the
+    // materialized index so the sampled series is the same rolled-up figure the
+    // ses cell displays (sessionTotals folds subagent children in, ADR-0002).
+    // Failure-isolated like the heartbeat: a contended tick omits the burn cue,
+    // it cannot blank the statusline.
+    if (activeTranscriptPath !== undefined &&
+        heartbeatAt !== undefined &&
+        Number.isFinite(heartbeatAt) &&
+        parentSessionIdOf(activeTranscriptPath) === undefined) {
+        try {
+            const sessionId = basename(activeTranscriptPath, ".jsonl");
+            const totals = sessionId === ""
+                ? undefined
+                : sessionTotals(index, sessionId, activeTranscriptPath);
+            if (totals !== undefined && Number.isFinite(totals.costUsd)) {
+                recordSpendSample(db, sessionId, heartbeatAt, totals.costUsd, 2 * BURN_WINDOW_MS);
+                const window = spendWindowDelta(db, sessionId, heartbeatAt, BURN_WINDOW_MS, totals.costUsd);
+                if (window !== undefined)
+                    index.activeSpendWindow = window;
+            }
+        }
+        catch {
+            // Cue omitted this tick; the next tick records a fresh sample.
+        }
+    }
     db.close();
     return index;
 }

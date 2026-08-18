@@ -1,6 +1,7 @@
 import { paint, padVisible } from "./ansi.js";
 import { FIVE_HOUR_SECONDS, SEVEN_DAY_SECONDS, SHORT_BAR_WIDTH, contextBar, elapsedFraction, formatCountdown, formatResetDate, paceBar, } from "./bars.js";
 import { fleetLineSegments, renderFleet, sesCell } from "./fleet-render.js";
+import { liveRate } from "./format.js";
 import { modelClass, } from "./index-store.js";
 import { DROP, assembleLine, } from "./layout.js";
 import { limitPill } from "./meters.js";
@@ -8,6 +9,15 @@ import {} from "./payload.js";
 export const PLACEHOLDER_LINE = "usage-meter · waiting for data";
 const ROW_LABELS = ["current", "limits", "spend", "fleet"];
 const GUTTER = Math.max(...ROW_LABELS.map((l) => l.length));
+// The no-store burn cue (#101): without the sample ring there is nothing to
+// window over, so the payload's lifetime cost/duration pair is the only rate
+// available. liveRate's minimum-span floor still applies, killing the
+// early-session ↑$72/hr spike this degraded path used to print.
+function fallbackRate(payload) {
+    if (payload.costUsd === undefined || payload.durationMs === undefined)
+        return undefined;
+    return liveRate(payload.costUsd, payload.durationMs);
+}
 // Join already-painted field cells with a two-tier separator: a dim middle-dot
 // flanked by spaces. Empty cells are dropped so an absent field leaves no
 // dangling separator. The same separator unifies every row.
@@ -170,11 +180,13 @@ function renderHud(payload, now, options, color, meters, index) {
     ];
     if (index !== null) {
         const month = now.toISOString().slice(0, 7);
-        const { spend, fleet } = fleetLineSegments(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, payload.durationMs, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath }, options.livenessWindowMs);
+        const { spend, fleet } = fleetLineSegments(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath }, options.livenessWindowMs);
         rows.push(spend, fleet);
     }
     else if (payload.costUsd !== undefined) {
-        rows.push([{ text: sesCell(payload.costUsd, payload.durationMs, color) }]);
+        rows.push([
+            { text: sesCell(payload.costUsd, fallbackRate(payload), color) },
+        ]);
     }
     const line = assembleLine(rows, options.columns ?? Infinity, color);
     // Everything degraded to empty (no model, no location, no data): a bare dim
@@ -200,7 +212,7 @@ export function renderLine(payload, now, options = {}) {
         rows.push(labelled("limits", limits, color));
     if (index !== null) {
         const month = now.toISOString().slice(0, 7);
-        const { spendCells, fleetCells } = renderFleet(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, payload.durationMs, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath }, options.livenessWindowMs);
+        const { spendCells, fleetCells } = renderFleet(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath }, options.livenessWindowMs);
         const spend = joinFields(spendCells, color);
         const fleet = joinFields(fleetCells, color);
         if (spend !== "")
@@ -211,9 +223,9 @@ export function renderLine(payload, now, options = {}) {
     else if (payload.costUsd !== undefined) {
         // No store this render: the payload cost is the live session's authority
         // (ADR-0004), cost-only (no token totals available without the index, so no
-        // cache% cell). The burn rate still renders when the payload carries a
-        // duration.
-        const ses = sesCell(payload.costUsd, payload.durationMs, color);
+        // cache% cell). With no sample ring available either, the burn cue degrades
+        // to the lifetime average behind liveRate's minimum-span floor (#101).
+        const ses = sesCell(payload.costUsd, fallbackRate(payload), color);
         rows.push(labelled("spend", ses, color));
     }
     if (rows.length === 0) {

@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import {} from "./aggregate.js";
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 function isLockedError(err) {
     return err instanceof Error && err.message.toLowerCase().includes("locked");
 }
@@ -83,6 +83,22 @@ function migrateToV5(db) {
     }
     db.exec("CREATE INDEX IF NOT EXISTS idx_sessions_liveness ON sessions (COALESCE(heartbeat_ms, last_ts))");
 }
+// v5 -> v6: the per-session spend sample ring behind the windowed burn rate
+// (#101). Every statusline tick records the session's cumulative rolled-up cost
+// once per bucket, and the ↑$/hr cue becomes the cost delta across a trailing
+// window instead of a lifetime average. The same series seeds the fleet velocity
+// sparkline follow-up (Discussion #99, C4). IF NOT EXISTS keeps the
+// concurrent-open race a no-op.
+function migrateToV6(db) {
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS spend_samples (
+      session_id TEXT NOT NULL,
+      bucket_ms  INTEGER NOT NULL,
+      cost_usd   REAL NOT NULL,
+      PRIMARY KEY (session_id, bucket_ms)
+    )
+  `);
+}
 // The composite (month, model_class) covers both month-scoped aggregates
 // (countSessionsByClassForMonth, monthClassSpendRows); last_ts supports legacy
 // liveness fallback. parent_session_id is in the month index's leading filter via
@@ -121,6 +137,10 @@ function migrateSchema(db) {
     if (version < 5) {
         migrateToV5(db);
         db.exec("PRAGMA user_version = 5");
+    }
+    if (version < 6) {
+        migrateToV6(db);
+        db.exec("PRAGMA user_version = 6");
     }
 }
 // The DB is the cross-session store, one row per Claude Code session keyed by
@@ -376,4 +396,37 @@ export function getMeta(db, key) {
 export function setMeta(db, key, value) {
     db.prepare(`INSERT INTO meta (key, value) VALUES (?, ?)
      ON CONFLICT(key) DO UPDATE SET value = excluded.value`).run(key, value);
+}
+// Samples are coarsened to a bucket so a sub-second refreshInterval keeps the
+// ring at ~window/bucket rows per session instead of one per tick; REPLACE makes
+// the last tick in a bucket win, so a bucket always holds the freshest
+// cumulative cost inside it.
+export const SPEND_SAMPLE_BUCKET_MS = 30_000;
+// One tick's cumulative-cost sample for the active session, plus the prune that
+// keeps the whole table bounded. The prune is deliberately global, not
+// per-session: a closed session never ticks again, so only another session's
+// prune can clear its dead rows. Everything older than the retention horizon is
+// dead for every session — the window can never reach past it.
+export function recordSpendSample(db, sessionId, nowMs, costUsd, retainMs) {
+    const bucketMs = Math.floor(nowMs / SPEND_SAMPLE_BUCKET_MS) * SPEND_SAMPLE_BUCKET_MS;
+    db.prepare("INSERT OR REPLACE INTO spend_samples (session_id, bucket_ms, cost_usd) VALUES (?, ?, ?)").run(sessionId, bucketMs, costUsd);
+    db.prepare("DELETE FROM spend_samples WHERE bucket_ms < ?").run(nowMs - retainMs);
+}
+export function spendWindowDelta(db, sessionId, nowMs, windowMs, currentCostUsd) {
+    const baseline = (db
+        .prepare(`SELECT bucket_ms, cost_usd FROM spend_samples
+       WHERE session_id = ? AND bucket_ms <= ?
+       ORDER BY bucket_ms DESC LIMIT 1`)
+        .get(sessionId, nowMs - windowMs) ??
+        db
+            .prepare(`SELECT bucket_ms, cost_usd FROM spend_samples
+         WHERE session_id = ?
+         ORDER BY bucket_ms ASC LIMIT 1`)
+            .get(sessionId));
+    if (baseline === undefined)
+        return undefined;
+    return {
+        deltaUsd: currentCostUsd - baseline.cost_usd,
+        spanMs: nowMs - baseline.bucket_ms,
+    };
 }

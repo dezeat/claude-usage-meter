@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  writeFileSync,
+  appendFileSync,
+  mkdirSync,
+  readFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
@@ -1539,4 +1545,96 @@ test("a session with no 5h payload still reads the freshest stored window so it 
     observedAt: 200,
   });
   assert.strictEqual(index.limits?.fiveHour?.usedPercentage, 62);
+});
+
+// ---------------------------------------------------------------------------
+// The windowed burn rate (#101): every active tick records a spend sample, and
+// the index carries the session's delta across the trailing window.
+// ---------------------------------------------------------------------------
+
+test("an active tick samples the session's spend and reports the growth as the window delta", async () => {
+  const tmp = makeTmpDir();
+  const transcript = writeJsonl(tmp, "grow.jsonl", [
+    assistantLine({
+      ts: "2026-06-13T10:00:00.000Z",
+      branch: "main",
+      reqId: "r1",
+      msgId: "m1",
+      model: "claude-sonnet-4-6",
+      input: 1_000,
+      output: 500,
+    }),
+  ]);
+  const claudeProjects = makeClaudeDir(tmp, [transcript]);
+  const active = join(claudeProjects, "-fake-midnight-marble", "grow.jsonl");
+  const dbPath = join(tmp, "index.db");
+  // A bucket-aligned wall clock keeps the span arithmetic exact.
+  const t1 = Date.UTC(2026, 5, 13, 10, 0, 30);
+
+  const index1 = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    active,
+    t1,
+  );
+  assert.ok(index1.activeSpendWindow, "the first tick baselines on itself");
+  assert.strictEqual(
+    index1.activeSpendWindow.deltaUsd,
+    0,
+    "no growth since the session's first sample",
+  );
+
+  // The session spends more; five minutes later the delta is exactly the cost
+  // of the appended turn and the span reaches back to the first sample.
+  appendFileSync(
+    active,
+    assistantLine({
+      ts: "2026-06-13T10:04:00.000Z",
+      branch: "main",
+      reqId: "r2",
+      msgId: "m2",
+      model: "claude-sonnet-4-6",
+      input: 2_000,
+      output: 1_000,
+    }) + "\n",
+    "utf8",
+  );
+  const index2 = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    active,
+    t1 + 5 * 60_000,
+  );
+  const cost1 = index1.sessions.grow?.costUsd ?? NaN;
+  const cost2 = index2.sessions.grow?.costUsd ?? NaN;
+  assert.ok(cost2 > cost1, "the appended turn raised the session cost");
+  assert.ok(index2.activeSpendWindow, "the second tick has a real baseline");
+  assert.ok(
+    Math.abs(index2.activeSpendWindow.deltaUsd - (cost2 - cost1)) < 1e-9,
+    "the window delta is exactly the spend since the baseline sample",
+  );
+  assert.strictEqual(index2.activeSpendWindow.spanMs, 5 * 60_000);
+});
+
+test("a heartbeat-only skeletal session gets no spend window, so the burn cue is omitted", async () => {
+  const tmp = makeTmpDir();
+  const claudeProjects = join(tmp, "claude", "projects");
+  const projectDir = join(claudeProjects, "-fake-midnight-marble");
+  mkdirSync(projectDir, { recursive: true });
+  const missingTranscript = join(projectDir, "joining.jsonl");
+  const dbPath = join(tmp, "index.db");
+
+  const index = await updateIndex(
+    dbPath,
+    claudeProjects,
+    DEFAULT_PRICING,
+    undefined,
+    missingTranscript,
+    12_345,
+  );
+  assert.strictEqual(index.activeSpendWindow, undefined);
 });
