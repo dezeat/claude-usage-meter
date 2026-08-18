@@ -399,7 +399,7 @@ test("an empty-session fixture (zero assistant lines) produces a zero-token reco
     result = foldLines(undefined, lines, seenKeys);
   });
   assert.ok(result);
-  assert.deepEqual(result.tokens, {}, "tokens are empty object");
+  assert.deepEqual({ ...result.tokens }, {}, "tokens are empty object");
   assert.equal(result.costUsd, 0);
 });
 
@@ -517,10 +517,11 @@ test("sessionTotals ignores a heartbeat-only row but keeps real zero-usage trans
   ]);
 
   assert.strictEqual(sessionTotals(index, "skeletal", undefined), undefined);
-  assert.deepStrictEqual(sessionTotals(index, "real-zero", undefined), {
-    tokens: {},
-    costUsd: 0,
-  });
+  const realZero = sessionTotals(index, "real-zero", undefined);
+  assert.ok(realZero);
+  // Token maps are null-prototype by design (#156); spread to compare values.
+  assert.deepStrictEqual({ ...realZero.tokens }, {});
+  assert.strictEqual(realZero.costUsd, 0);
 });
 
 test("sessionTotals falls back to the path column only when session_id is absent", () => {
@@ -698,21 +699,27 @@ test("a first heartbeat makes a missing active transcript visible within the sam
     12_345,
   );
 
-  assert.deepStrictEqual(index.sessions.joining, {
-    path: missingTranscript,
-    sessionId: "joining",
-    branch: "",
-    modelClass: "unknown",
-    tokens: {},
-    costUsd: 0,
-    lastTs: 0,
-    byteOffset: 0,
-    parentSessionId: undefined,
-    heartbeatMs: 12_345,
-    transcriptIndexed: false,
-  });
-  assert.deepStrictEqual(index.byMonth, {});
-  assert.deepStrictEqual(index.byBranch, {});
+  assert.deepStrictEqual(
+    {
+      ...index.sessions.joining,
+      tokens: { ...index.sessions.joining?.tokens },
+    },
+    {
+      path: missingTranscript,
+      sessionId: "joining",
+      branch: "",
+      modelClass: "unknown",
+      tokens: {},
+      costUsd: 0,
+      lastTs: 0,
+      byteOffset: 0,
+      parentSessionId: undefined,
+      heartbeatMs: 12_345,
+      transcriptIndexed: false,
+    },
+  );
+  assert.deepStrictEqual({ ...index.byMonth }, {});
+  assert.deepStrictEqual({ ...index.byBranch }, {});
   assert.match(
     formatReport(index, new Date(12_345), false),
     /By branch\n─────────\n[ ]{2}\(no data\)/,
@@ -774,7 +781,11 @@ test("the active session's model class rides its heartbeat into the roster-visib
     false,
     "still skeletal — the class does not promote it into spend rollups",
   );
-  assert.deepStrictEqual(index.byMonth, {}, "no transcript, no month spend");
+  assert.deepStrictEqual(
+    { ...index.byMonth },
+    {},
+    "no transcript, no month spend",
+  );
 
   // The roster (from another session's viewpoint) names the class, not unknown.
   const live = liveSessionCounts(dbPath, 12_345, 30_000);
@@ -1637,4 +1648,37 @@ test("a heartbeat-only skeletal session gets no spend window, so the burn cue is
     12_345,
   );
   assert.strictEqual(index.activeSpendWindow, undefined);
+});
+
+// Git accepts `__proto__` and `constructor` as branch names, and the branch is a
+// key in the cross-session rollup. On a plain object those keys resolve to
+// inherited members instead of allocating, so `??=` never assigns and the rollup
+// throws — taking the whole statusline down silently. See #156.
+test("a session on a branch whose name collides with an Object prototype key still rolls up", async () => {
+  for (const branch of ["__proto__", "constructor"]) {
+    const tmp = makeTmpDir();
+    const dbPath = join(tmp, "index.db");
+    const transcript = writeJsonl(tmp, "hostile.jsonl", [
+      assistantLine({
+        ts: "2026-06-13T10:00:00.000Z",
+        branch,
+        reqId: "r1",
+        msgId: "m1",
+        model: "claude-opus-4-8",
+        input: 1_000_000,
+        output: 0,
+      }),
+    ]);
+
+    updateSession(dbPath, transcript, DEFAULT_PRICING);
+
+    const index = await readIndex(dbPath);
+    assert.ok(index, `the store holds the session on branch ${branch}`);
+    // Opus 4.8 input is $5 / 1M tokens (published pricing) → 1M input = $5.00.
+    assert.strictEqual(
+      branchTotals(index, branch).costUsd,
+      5,
+      `branch ${branch} must roll up like any other branch`,
+    );
+  }
 });
