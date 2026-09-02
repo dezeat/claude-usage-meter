@@ -37,6 +37,11 @@ function decimalMicros(value, where) {
   const [whole, fraction = ""] = value.split(".");
   if (fraction.length > 6) fail(`${where} exceeds six fractional digits`);
   const micros = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+  exactRuntimeNumber(micros, where);
+  return micros;
+}
+
+function exactRuntimeNumber(micros, where) {
   if (micros > MAX_SAFE_MICROS) {
     fail(`${where} exceeds exact finite runtime representation`);
   }
@@ -51,7 +56,7 @@ function decimalMicros(value, where) {
   if (!Number.isFinite(runtime) || runtimeMicros !== micros) {
     fail(`${where} cannot round-trip exactly at micro-USD precision`);
   }
-  return micros;
+  return runtime;
 }
 
 function validateTier(value, where) {
@@ -62,14 +67,19 @@ function validateTier(value, where) {
     tier.outputUsdPerMTok,
     `${where}.outputUsdPerMTok`,
   );
+  const cacheCreation = (input * 125n) / 100n;
+  const cacheRead = (input * 10n) / 100n;
   if ((input * 125n) % 100n !== 0n || (input * 10n) % 100n !== 0n) {
     fail(`${where} cache rates are not exact micro-USD`);
   }
   return {
-    input: Number(input) / 1_000_000,
-    output: Number(output) / 1_000_000,
-    cacheRead: Number((input * 10n) / 100n) / 1_000_000,
-    cacheCreation: Number((input * 125n) / 100n) / 1_000_000,
+    input: exactRuntimeNumber(input, `${where}.inputUsdPerMTok`),
+    output: exactRuntimeNumber(output, `${where}.outputUsdPerMTok`),
+    cacheRead: exactRuntimeNumber(cacheRead, `${where}.cacheReadPerMTok`),
+    cacheCreation: exactRuntimeNumber(
+      cacheCreation,
+      `${where}.cacheCreationPerMTok`,
+    ),
   };
 }
 

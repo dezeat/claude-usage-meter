@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -82,6 +82,32 @@ test("unsafe numeric magnitudes and malformed canonical IDs fail closed", () => 
   }
 });
 
+test("every standard and fast cache derivative must be exact and safely representable", () => {
+  for (const [tier, input] of [
+    ["standard", "9007199254.74098"],
+    ["fast", "9007199254.74098"],
+    ["standard", "0.000004"],
+    ["fast", "0.000004"],
+    ["standard", "0.00001"],
+    ["fast", "0.00001"],
+  ]) {
+    const copy = structuredClone(valid);
+    if (tier === "fast") {
+      copy.models[0].fast = {
+        inputUsdPerMTok: input,
+        outputUsdPerMTok: "25",
+      };
+    } else {
+      copy.models[0].standard.inputUsdPerMTok = input;
+    }
+    assert.throws(
+      () => renderRegister(JSON.stringify(copy)),
+      /cache rates are not exact|exact finite runtime representation/,
+      `${tier} input ${input}`,
+    );
+  }
+});
+
 test("validation failure and check mode never write output", async () => {
   const root = await mkdtemp(join(tmpdir(), "pricing-generator-"));
   await mkdir(join(root, "pricing"));
@@ -91,6 +117,20 @@ test("validation failure and check mode never write output", async () => {
   await writeFile(join(root, "pricing/models.json"), "{}");
   await assert.rejects(generate(root, false), /invalid pricing register/);
   assert.equal(await readFile(output, "utf8"), "sentinel\n");
+  assert.deepEqual(await readdir(join(root, "src/generated")), [
+    "pricing-register.ts",
+  ]);
+  const unsafeDerivative = structuredClone(valid);
+  unsafeDerivative.models[0].standard.inputUsdPerMTok = "9007199254.74098";
+  await writeFile(
+    join(root, "pricing/models.json"),
+    JSON.stringify(unsafeDerivative),
+  );
+  await assert.rejects(generate(root, false), /exact finite runtime/);
+  assert.equal(await readFile(output, "utf8"), "sentinel\n");
+  assert.deepEqual(await readdir(join(root, "src/generated")), [
+    "pricing-register.ts",
+  ]);
   await writeFile(join(root, "pricing/models.json"), JSON.stringify(valid));
   await assert.rejects(generate(root, true), /stale/);
   assert.equal(await readFile(output, "utf8"), "sentinel\n");
