@@ -3,7 +3,7 @@
   "name": "claude-usage-meter",
   "displayName": "Claude Usage Meter",
   "description": "Live usage and cost for Claude Code: 5h/7d limit pace bars, cost-forward spend, and a cross-session fleet view of every session you have running — plus a per-model cost summary after each task. No network, no telemetry, zero runtime dependencies.",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "author": {
     "name": "dezeat"
   },
