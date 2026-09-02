@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="740" height="212" viewBox="0 0 740 212" role="img" aria-label="claude-usage-meter statusline, block layout with pill meters: current, limits, spend and fleet rows">
+<svg xmlns="http://www.w3.org/2000/svg" width="740" height="212" viewBox="0 0 740 212" role="img" aria-label="claude-usage-meter statusline, block layout with pill meters: current, limits and spend rows plus the opt-in fleet row">
   <style>
     text { font-family: "SFMono-Regular", "Consolas", "DejaVu Sans Mono", "Menlo", monospace; font-size: 15px; }
     .accent { fill: #4ea3ff; }
@@ -40,5 +40,5 @@
 
   <text x="28" y="168" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">4</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">8</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> 3 opus</tspan><tspan class="green"> ●</tspan><tspan class="bright"> 2 fable</tspan><tspan class="green"> ●</tspan><tspan class="bright"> 2 sonnet</tspan></text>
 
-  <text x="28" y="197" class="dim" font-size="12" xml:space="preserve">no network · reads stdin + local transcripts · numbers illustrative</text>
+  <text x="28" y="197" class="dim" font-size="12" xml:space="preserve">no network · reads stdin + local transcripts · fleet row opt-in (USAGE_METER_FLEET=on) · numbers illustrative</text>
 </svg>
