@@ -1,0 +1,224 @@
+import { readFile, rename, unlink, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const DECIMAL = /^(?:0\.[0-9]*[1-9]|[1-9][0-9]*(?:\.[0-9]*[1-9])?)$/;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MODEL_KEYS = ["id", "class", "standard"];
+const RATE_KEYS = ["inputUsdPerMTok", "outputUsdPerMTok"];
+const MAX_SAFE_MICROS = BigInt(Number.MAX_SAFE_INTEGER);
+
+function fail(message) {
+  throw new Error(`invalid pricing register: ${message}`);
+}
+
+function record(value, where) {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    fail(`${where} must be an object`);
+  }
+  return value;
+}
+
+function exactKeys(value, expected, where, optional = []) {
+  const keys = Object.keys(value);
+  const canonical = [
+    ...expected,
+    ...optional.filter((key) => keys.includes(key)),
+  ];
+  if (keys.join("\0") !== canonical.join("\0")) {
+    fail(`${where} has unexpected or missing fields`);
+  }
+}
+
+function decimalMicros(value, where) {
+  if (typeof value !== "string" || !DECIMAL.test(value)) {
+    fail(`${where} must be a canonical positive decimal string`);
+  }
+  const [whole, fraction = ""] = value.split(".");
+  if (fraction.length > 6) fail(`${where} exceeds six fractional digits`);
+  const micros = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+  exactRuntimeNumber(micros, where);
+  return micros;
+}
+
+function exactRuntimeNumber(micros, where) {
+  if (micros > MAX_SAFE_MICROS) {
+    fail(`${where} exceeds exact finite runtime representation`);
+  }
+  const runtime = Number(micros) / 1_000_000;
+  const runtimeText = String(runtime);
+  const [runtimeWhole, runtimeFraction = ""] = runtimeText.split(".");
+  const runtimeMicros =
+    /^\d+(?:\.\d+)?$/.test(runtimeText) && runtimeFraction.length <= 6
+      ? BigInt(runtimeWhole) * 1_000_000n +
+        BigInt(runtimeFraction.padEnd(6, "0"))
+      : undefined;
+  if (!Number.isFinite(runtime) || runtimeMicros !== micros) {
+    fail(`${where} cannot round-trip exactly at micro-USD precision`);
+  }
+  return runtime;
+}
+
+function validateTier(value, where) {
+  const tier = record(value, where);
+  exactKeys(tier, RATE_KEYS, where);
+  const input = decimalMicros(tier.inputUsdPerMTok, `${where}.inputUsdPerMTok`);
+  const output = decimalMicros(
+    tier.outputUsdPerMTok,
+    `${where}.outputUsdPerMTok`,
+  );
+  const cacheCreation = (input * 125n) / 100n;
+  const cacheRead = (input * 10n) / 100n;
+  if ((input * 125n) % 100n !== 0n || (input * 10n) % 100n !== 0n) {
+    fail(`${where} cache rates are not exact micro-USD`);
+  }
+  return {
+    input: exactRuntimeNumber(input, `${where}.inputUsdPerMTok`),
+    output: exactRuntimeNumber(output, `${where}.outputUsdPerMTok`),
+    cacheRead: exactRuntimeNumber(cacheRead, `${where}.cacheReadPerMTok`),
+    cacheCreation: exactRuntimeNumber(
+      cacheCreation,
+      `${where}.cacheCreationPerMTok`,
+    ),
+  };
+}
+
+export function renderRegister(source) {
+  let parsed;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    fail("artifact is not JSON");
+  }
+  const root = record(parsed, "root");
+  exactKeys(root, ["schemaVersion", "asOf", "models"], "root");
+  if (root.schemaVersion !== 1) fail("schemaVersion must be 1");
+  if (
+    typeof root.asOf !== "string" ||
+    !DATE.test(root.asOf) ||
+    new Date(`${root.asOf}T00:00:00Z`).toISOString().slice(0, 10) !== root.asOf
+  ) {
+    fail("asOf must be a real YYYY-MM-DD date");
+  }
+  if (!Array.isArray(root.models) || root.models.length === 0) {
+    fail("models must be a non-empty array");
+  }
+
+  const rows = [];
+  let previous = "";
+  for (const [index, raw] of root.models.entries()) {
+    const model = record(raw, `models[${index}]`);
+    exactKeys(model, MODEL_KEYS, `models[${index}]`, ["fast"]);
+    if (
+      typeof model.id !== "string" ||
+      !/^claude-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(model.id) ||
+      /-\d{8}$/.test(model.id)
+    )
+      fail(`models[${index}].id is not a dateless canonical id`);
+    if (model.id <= previous)
+      fail("models must be unique and bytewise ascending");
+    previous = model.id;
+    if (
+      typeof model.class !== "string" ||
+      !/^[a-z][a-z0-9-]*$/.test(model.class)
+    ) {
+      fail(`models[${index}].class is not a lower-case ASCII identifier`);
+    }
+    const standard = validateTier(model.standard, `models[${index}].standard`);
+    const fast =
+      model.fast === undefined
+        ? undefined
+        : validateTier(model.fast, `models[${index}].fast`);
+    rows.push({ id: model.id, className: model.class, standard, fast });
+  }
+
+  const rateLines = rows
+    .map(
+      (row) => `    ${JSON.stringify(row.id)}: {
+      inputPerMTok: ${row.standard.input},
+      outputPerMTok: ${row.standard.output},
+      cacheReadPerMTok: ${row.standard.cacheRead},
+      cacheCreationPerMTok: ${row.standard.cacheCreation},
+    },`,
+    )
+    .join("\n");
+  const classLines = rows
+    .map(
+      (row) =>
+        `    ${JSON.stringify(row.id)}: ${JSON.stringify(row.className)},`,
+    )
+    .join("\n");
+  const fastLines = rows
+    .filter((row) => row.fast !== undefined)
+    .map(
+      (row) => `    ${JSON.stringify(row.id)}: {
+      inputPerMTok: ${row.fast.input},
+      outputPerMTok: ${row.fast.output},
+      cacheReadPerMTok: ${row.fast.cacheRead},
+      cacheCreationPerMTok: ${row.fast.cacheCreation},
+    },`,
+    )
+    .join("\n");
+  const fastBlock =
+    fastLines === ""
+      ? "  fastRates: {},"
+      : `  fastRates: {
+${fastLines}
+  },`;
+  return `// Generated by npm run generate:pricing from pricing/models.json. Do not edit.
+export const GENERATED_PRICING = {
+  asOf: ${JSON.stringify(root.asOf)},
+  rates: {
+${rateLines}
+  },
+  classes: {
+${classLines}
+  },
+${fastBlock}
+} as const;
+`;
+}
+
+export async function generate(root, check) {
+  const sourcePath = join(root, "pricing/models.json");
+  const outputPath = join(root, "src/generated/pricing-register.ts");
+  const rendered = renderRegister(await readFile(sourcePath, "utf8"));
+  let current;
+  try {
+    current = await readFile(outputPath, "utf8");
+  } catch {
+    current = undefined;
+  }
+  if (check) {
+    if (current !== rendered)
+      throw new Error("generated pricing register is stale");
+    return;
+  }
+  if (current === rendered) return;
+  const temporary = join(
+    dirname(outputPath),
+    `.pricing-register.${process.pid}.tmp`,
+  );
+  try {
+    await writeFile(temporary, rendered, { encoding: "utf8", flag: "wx" });
+    await rename(temporary, outputPath);
+  } catch (error) {
+    await unlink(temporary).catch(() => {});
+    throw error;
+  }
+}
+
+const ownPath = fileURLToPath(import.meta.url);
+if (resolve(process.argv[1] ?? "") === ownPath) {
+  const check = process.argv.includes("--check");
+  const rootArg = process.argv.find((arg) => arg.startsWith("--root="));
+  const root = rootArg
+    ? resolve(rootArg.slice(7))
+    : resolve(dirname(ownPath), "..");
+  generate(root, check).catch((error) => {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    process.exitCode = 1;
+  });
+}
