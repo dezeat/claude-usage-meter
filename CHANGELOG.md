@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.3.0](https://github.com/dezeat/claude-usage-meter/compare/v1.2.1...v1.3.0) (2026-09-02)
+
+
+### Features
+
+* make the fleet row opt-in via USAGE_METER_FLEET ([b4ca60d](https://github.com/dezeat/claude-usage-meter/commit/b4ca60de43219047ee613dbe252818ab0f360403))
+* make the fleet row opt-in via USAGE_METER_FLEET ([671d7f9](https://github.com/dezeat/claude-usage-meter/commit/671d7f9cd05cdcd6d62ece1b99a551a192d13206))
+
+
+### Documentation
+
+* propose ADR-0009 — pricing table as the model register ([#150](https://github.com/dezeat/claude-usage-meter/issues/150)) ([fcfef6e](https://github.com/dezeat/claude-usage-meter/commit/fcfef6e169fe29261a887409d83fa86fb7537fb4))
+
 ## [1.2.1](https://github.com/dezeat/claude-usage-meter/compare/v1.2.0...v1.2.1) (2026-08-18)
 
 
