@@ -65,6 +65,12 @@ interface RenderOptions {
   // Heartbeat expiry window resolved from the statusline refresh cadence at the
   // edge. Undefined keeps the pure renderer's three-default-ticks policy.
   livenessWindowMs?: number;
+  // The fleet-row visibility toggle (ADR-0010, #164). Defaults to true here so
+  // the pure renderer keeps its historical shape for existing tests; the product
+  // default (hidden — the roster is opt-in via USAGE_METER_FLEET) is resolved at
+  // the edge. Hides only the roster; the spend cells it shares a builder with
+  // stay.
+  fleet?: boolean;
 }
 
 // The no-store burn cue (#101): without the sample ring there is nothing to
@@ -344,7 +350,8 @@ function renderHud(
       { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath },
       options.livenessWindowMs,
     );
-    rows.push(spend, fleet);
+    rows.push(spend);
+    if (options.fleet ?? true) rows.push(fleet);
   } else if (payload.costUsd !== undefined) {
     rows.push([
       { text: sesCell(payload.costUsd, fallbackRate(payload), color) },
@@ -400,7 +407,7 @@ export function renderLine(
       options.livenessWindowMs,
     );
     const spend = joinFields(spendCells, color);
-    const fleet = joinFields(fleetCells, color);
+    const fleet = (options.fleet ?? true) ? joinFields(fleetCells, color) : "";
     if (spend !== "") rows.push(labelled("spend", spend, color));
     if (fleet !== "") rows.push(labelled("fleet", fleet, color));
   } else if (payload.costUsd !== undefined) {

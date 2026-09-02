@@ -181,7 +181,9 @@ function renderHud(payload, now, options, color, meters, index) {
     if (index !== null) {
         const month = now.toISOString().slice(0, 7);
         const { spend, fleet } = fleetLineSegments(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath }, options.livenessWindowMs);
-        rows.push(spend, fleet);
+        rows.push(spend);
+        if (options.fleet ?? true)
+            rows.push(fleet);
     }
     else if (payload.costUsd !== undefined) {
         rows.push([
@@ -214,7 +216,7 @@ export function renderLine(payload, now, options = {}) {
         const month = now.toISOString().slice(0, 7);
         const { spendCells, fleetCells } = renderFleet(index, options.indexPath ?? "", activeClass(payload), payload.costUsd, month, now.getTime(), color, { sessionId: payload.sessionId, transcriptPath: payload.transcriptPath }, options.livenessWindowMs);
         const spend = joinFields(spendCells, color);
-        const fleet = joinFields(fleetCells, color);
+        const fleet = (options.fleet ?? true) ? joinFields(fleetCells, color) : "";
         if (spend !== "")
             rows.push(labelled("spend", spend, color));
         if (fleet !== "")
