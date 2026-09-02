@@ -395,6 +395,44 @@ test("the default layout still renders the four labelled block rows", () => {
   assert.match(rows[0] ?? "", /^current /);
 });
 
+test("fleet:false hides the fleet row while the spend row and its Σ ledger stay", () => {
+  const rows = renderLine(parsePayload(promax), fixtureNow, {
+    color: false,
+    index: populatedIndex(),
+    indexPath: ":memory:",
+    fleet: false,
+  }).split("\n");
+  assert.equal(rows.length, 3, "three rows without the roster");
+  assert.ok(
+    rows.every((r) => !r.startsWith("fleet")),
+    "no fleet row when the toggle is off",
+  );
+  assert.match(rows[2] ?? "", /^spend /);
+  assert.ok(
+    (rows[2] ?? "").includes("Σ"),
+    "the month ledger belongs to spend and survives",
+  );
+});
+
+test("fleet:false removes the count/roster segments from the line HUD, keeping ses", () => {
+  const hud = (fleet: boolean | undefined): string =>
+    renderLine(parsePayload(promax), fixtureNow, {
+      color: false,
+      layout: "line",
+      index: populatedIndex(),
+      indexPath: ":memory:",
+      columns: 200,
+      fleet,
+    });
+  assert.ok(
+    hud(undefined).includes("1 Σ 1"),
+    "the count cell shows by default",
+  );
+  const without = hud(false);
+  assert.ok(!without.includes("1 Σ 1"), "no count cell with the toggle off");
+  assert.ok(without.includes("ses"), "the live ses spend cell survives");
+});
+
 for (const columns of [80, 60, 40, 20, 8]) {
   test(`layout:line never emits a line wider than columns=${columns}`, () => {
     const line = renderLine(parsePayload(promax), fixtureNow, {

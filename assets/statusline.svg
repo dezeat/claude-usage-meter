@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="300" viewBox="0 0 920 300" role="img" aria-label="A Claude Code input bar with the goal improve claude-usage-meter, make no mistakes, above a four-row statusline showing current, limits, spend and fleet data with synthetic illustrative values, and an auto-mode footer">
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="274" viewBox="0 0 920 274" role="img" aria-label="A Claude Code input bar with the goal improve claude-usage-meter, make no mistakes, above a three-row statusline showing current, limits and spend data with synthetic illustrative values, and an auto-mode footer">
   <defs>
     <linearGradient id="terminal-bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#11161d"/>
@@ -8,7 +8,7 @@
       <feDropShadow dx="0" dy="12" stdDeviation="18" flood-color="#000000" flood-opacity="0.38"/>
     </filter>
     <clipPath id="terminal-clip">
-      <rect x="20" y="18" width="880" height="264" rx="12"/>
+      <rect x="20" y="18" width="880" height="238" rx="12"/>
     </clipPath>
   </defs>
 
@@ -26,9 +26,9 @@
     .red    { fill: #f85149; }
   </style>
 
-  <rect width="920" height="300" fill="#070a0e"/>
+  <rect width="920" height="274" fill="#070a0e"/>
   <g filter="url(#shadow)">
-    <rect x="20" y="18" width="880" height="264" rx="12" fill="url(#terminal-bg)" stroke="#30363d"/>
+    <rect x="20" y="18" width="880" height="238" rx="12" fill="url(#terminal-bg)" stroke="#30363d"/>
   </g>
 
   <g clip-path="url(#terminal-clip)">
@@ -42,10 +42,8 @@
 
     <text x="54" y="176" xml:space="preserve"><tspan class="accent">limits   </tspan><tspan class="base">5h </tspan><tspan class="green">▓</tspan><tspan class="bright">│</tspan><tspan class="dim">░░</tspan><tspan class="base"> 42%</tspan><tspan class="dim"> ⟳ 2h · </tspan><tspan class="base">7d </tspan><tspan class="red">▓▓▓</tspan><tspan class="bright">│</tspan><tspan class="red">░</tspan><tspan class="base"> 78%</tspan><tspan class="dim"> ⟳ 3d (Sa 26.07)</tspan></text>
 
-    <text x="54" y="202" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$2.14</tspan><tspan class="dim"> · Σ $246.80 mo</tspan></text>
+    <text x="54" y="202" xml:space="preserve"><tspan class="accent">spend    </tspan><tspan class="dim">ses </tspan><tspan class="bright">$2.14</tspan><tspan class="accent"> ↑</tspan><tspan class="bright">$4.10</tspan><tspan class="dim">/hr · </tspan><tspan class="bright">96%</tspan><tspan class="dim"> cached · Σ $246.80 mo</tspan></text>
 
-    <text x="54" y="228" xml:space="preserve"><tspan class="accent">fleet    </tspan><tspan class="bright">6</tspan><tspan class="dim"> Σ </tspan><tspan class="bright">11</tspan><tspan class="dim"> · </tspan><tspan class="green">●</tspan><tspan class="bright"> 2 opus</tspan></text>
-
-    <text x="54" y="262" xml:space="preserve"><tspan class="claude">⏵⏵ auto mode on</tspan><tspan class="dim"> (shift+tab to cycle) · ← for agents</tspan></text>
+    <text x="54" y="236" xml:space="preserve"><tspan class="claude">▶▶ auto mode on</tspan><tspan class="dim"> (shift+tab to cycle) · ← for agents</tspan></text>
   </g>
 </svg>
