@@ -18,17 +18,18 @@ locally, from:
 
 Nothing ever leaves your machine.
 
-![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a four-row statusline showing current, limits, spend and fleet data directly below it, above an auto-mode footer](assets/statusline.png)
+![A Claude Code prompt containing the goal improve claude-usage-meter, make no mistakes, with a three-row statusline showing current, limits and spend data directly below it, above an auto-mode footer](assets/statusline.png)
 
-The default look is a **four-row block**, each row a self-contained readout:
+The default look is a **three-row block**, each row a self-contained readout:
 
 - **current** — the active model and where you're rooted (repo · branch · worktree).
 - **limits** — context, 5-hour and 7-day account usage as short pace bars with
   reset countdowns.
 - **spend** — cost-forward: this session's cost, a live burn rate, the cache-read
   share, and the month total.
-- **fleet** — how many sessions you've run this month, and who else is live right
-  now.
+- **fleet** (opt-in, `USAGE_METER_FLEET=on`) — how many sessions you've run this
+  month, and who else is live right now. Valuable during parallel work; hidden by
+  default so the everyday readout stays session-and-spend only.
 
 Fields and row-groups are separated by a dim `·`, and each row label is
 accent-coloured.
@@ -94,7 +95,8 @@ different cadence. Run both.
   month costs are reference-cadence detail, served by the
   [off-session report](#off-session-report).
 
-**fleet** — session counts first, then who else is live (e.g. `4 Σ 8`):
+**fleet** (opt-in, `USAGE_METER_FLEET=on`) — session counts first, then who else
+is live (e.g. `4 Σ 8`):
 
 - **`<n> Σ <total>`** — the active class's sessions **this month**, a dim `Σ`
   connective, then the **month total** across every class. The `current` row
@@ -226,17 +228,22 @@ the **absolute** path to your clone:
 
 ### Layout & meters
 
-The statusline has two orthogonal presentation toggles, read from environment
+The statusline has three orthogonal presentation toggles, read from environment
 variables set inline in the `command` exactly like `NO_COLOR`
-([ADR-0007](docs/decisions/ADR-0007-statusline-layout-and-meter-toggles.md)):
+([ADR-0007](docs/decisions/ADR-0007-statusline-layout-and-meter-toggles.md),
+[ADR-0010](docs/decisions/ADR-0010-fleet-row-opt-in.md)):
 
-- **`USAGE_METER_LAYOUT`** — `block` (**default**, the four stacked rows) or `line`
+- **`USAGE_METER_LAYOUT`** — `block` (**default**, the stacked rows) or `line`
   (the single-line HUD).
 - **`USAGE_METER_METERS`** — `bar` (**default**, short pace bars) or `pill`
   (reverse-video severity chips; degrades to bracketed text `[85%]` under
   `NO_COLOR`).
+- **`USAGE_METER_FLEET`** — `on` shows the fleet row (session counts + live
+  roster); **hidden by default**, in the block layout and the `line` HUD alike.
+  The fleet data stays in the [off-session report](#off-session-report) either
+  way.
 
-They compose into four looks; an unrecognized value falls back to the default and
+They compose freely; an unrecognized value falls back to the default and
 never throws. Renders of each — the `line` HUD and the `pill` meters — live in
 [`assets/`](assets/). To pin one, set the env vars inline in the `command`:
 

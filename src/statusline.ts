@@ -33,6 +33,13 @@ function meterMode(): "bar" | "pill" {
   return process.env.USAGE_METER_METERS === "pill" ? "pill" : "bar";
 }
 
+// The fleet roster is opt-in (ADR-0010, #164): the row is persistent noise for a
+// single-session readout, so the product default hides it and `on` brings it
+// back — in the block layout and the line HUD alike.
+function fleetEnabled(): boolean {
+  return process.env.USAGE_METER_FLEET === "on";
+}
+
 // The active session's model class off its payload, stamped onto its heartbeat row
 // so a just-opened session names itself in every other session's live roster
 // instead of "unknown" (it has no folded transcript yet). Mirrors render's
@@ -84,6 +91,7 @@ async function main(): Promise<void> {
     limits: index?.limits,
     layout: layoutMode(),
     meters: meterMode(),
+    fleet: fleetEnabled(),
     columns: terminalColumns(),
     livenessWindowMs: heartbeatLivenessWindowMs(
       parseRefreshIntervalMs(process.env.USAGE_METER_REFRESH_INTERVAL),
