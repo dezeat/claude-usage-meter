@@ -2,7 +2,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { type UsageByModel } from "./aggregate.js";
-import { cost, DEFAULT_PRICING, type PricingTable } from "./pricing.js";
+import {
+  cost,
+  DEFAULT_PRICING,
+  registeredModelClass,
+  type PricingTable,
+} from "./pricing.js";
 
 function oneMillionInput(model: string): UsageByModel {
   return {
@@ -111,6 +116,25 @@ test("Mythos 5 is priced at the same rate as Fable 5", () => {
     cost(oneMillionInput("claude-mythos-5"), DEFAULT_PRICING).totalUsd,
     10,
   );
+});
+
+test("every priced model has a registered class", () => {
+  for (const model of Object.keys(DEFAULT_PRICING.rates)) {
+    assert.ok(registeredModelClass(model), model);
+  }
+});
+
+test("dated model aliases resolve through the canonical class register", () => {
+  assert.equal(registeredModelClass("claude-opus-4-1-20250805"), "opus");
+  assert.equal(registeredModelClass("claude-mythos-5"), "fable");
+  assert.equal(registeredModelClass("claude-opus-99"), undefined);
+});
+
+test("an unknown family keeps the legacy display fallback without becoming priced", () => {
+  assert.equal(registeredModelClass("claude-opus-99"), undefined);
+  const result = cost(oneMillionInput("claude-opus-99"), DEFAULT_PRICING);
+  assert.equal(result.perModel[0]?.known, false);
+  assert.equal(result.totalUsd, 0);
 });
 
 test("current Opus 5 bills 1M input tokens at the $5 Opus rate", () => {

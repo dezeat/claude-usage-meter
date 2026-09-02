@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 
 import {
   foldLines,
+  modelClass,
   discoverTranscriptPaths,
   parentSessionIdOf,
   updateIndex,
@@ -435,6 +436,11 @@ test("a model id without '-' is handled without crashing and returns a usable cl
     "localmodel",
     "raw id used as class when no known class word matches",
   );
+});
+
+test("an unknown model family retains the best-effort display class", () => {
+  assert.equal(modelClass("claude-opus-99"), "opus");
+  assert.equal(modelClass("claude-newfamily-1"), "claude-newfamily-1");
 });
 
 // ---------------------------------------------------------------------------

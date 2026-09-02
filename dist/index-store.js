@@ -2,7 +2,7 @@ import { readFileSync, statSync, readdirSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { aggregateTranscript } from "./aggregate.js";
 import { BURN_WINDOW_MS, sumUsage } from "./format.js";
-import { cost } from "./pricing.js";
+import { cost, registeredModelClass } from "./pricing.js";
 import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, getMeta, setMeta, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, upsertSessionHeartbeat, recordSpendSample, spendWindowDelta, } from "./db.js";
 import {} from "./payload.js";
 function asRecord(value) {
@@ -11,6 +11,9 @@ function asRecord(value) {
         : undefined;
 }
 export function modelClass(modelId) {
+    const registered = registeredModelClass(modelId);
+    if (registered !== undefined)
+        return registered;
     for (const cls of ["opus", "sonnet", "haiku", "fable"]) {
         if (modelId.includes(cls))
             return cls;
