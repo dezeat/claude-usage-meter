@@ -1,6 +1,6 @@
 # ADR-0004: Two cost sources — payload cost for the live session, pricing-table calc for everything persisted
 
-- **Status:** accepted
+- **Status:** superseded by [ADR-0009](ADR-0009-pricing-table-is-the-model-register.md)
 - **Date:** 2026-06-15
 - **Discussion:** https://github.com/dezeat/claude-usage-meter/discussions/47
 
