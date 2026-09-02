@@ -2,7 +2,7 @@ import { readFileSync, statSync, readdirSync } from "node:fs";
 import { join, basename, dirname } from "node:path";
 import { aggregateTranscript } from "./aggregate.js";
 import { BURN_WINDOW_MS, sumUsage } from "./format.js";
-import { cost } from "./pricing.js";
+import { cost, registeredModelClass } from "./pricing.js";
 import { openDb, getSession, allSessions, upsertSession, upsertAccountLimit, getAccountLimit, getMeta, setMeta, countSessionsByClassForMonth, countLiveSessionsByClass, monthClassSpendRows, upsertSessionHeartbeat, recordSpendSample, spendWindowDelta, } from "./db.js";
 import {} from "./payload.js";
 function asRecord(value) {
@@ -11,11 +11,7 @@ function asRecord(value) {
         : undefined;
 }
 export function modelClass(modelId) {
-    for (const cls of ["opus", "sonnet", "haiku", "fable"]) {
-        if (modelId.includes(cls))
-            return cls;
-    }
-    return modelId;
+    return registeredModelClass(modelId) ?? modelId;
 }
 // The parent session id of a subagent transcript, read off its path: Claude Code
 // writes subagent turns to <project>/<PARENT_SESSION_ID>/subagents/<file>.jsonl

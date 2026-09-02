@@ -1,0 +1,118 @@
+{
+  "schemaVersion": 1,
+  "asOf": "2026-07-28",
+  "models": [
+    {
+      "id": "claude-fable-5",
+      "class": "fable",
+      "standard": {
+        "inputUsdPerMTok": "10",
+        "outputUsdPerMTok": "50"
+      }
+    },
+    {
+      "id": "claude-haiku-4-5",
+      "class": "haiku",
+      "standard": {
+        "inputUsdPerMTok": "1",
+        "outputUsdPerMTok": "5"
+      }
+    },
+    {
+      "id": "claude-mythos-5",
+      "class": "fable",
+      "standard": {
+        "inputUsdPerMTok": "10",
+        "outputUsdPerMTok": "50"
+      }
+    },
+    {
+      "id": "claude-opus-4-0",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "15",
+        "outputUsdPerMTok": "75"
+      }
+    },
+    {
+      "id": "claude-opus-4-1",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "15",
+        "outputUsdPerMTok": "75"
+      }
+    },
+    {
+      "id": "claude-opus-4-5",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "5",
+        "outputUsdPerMTok": "25"
+      }
+    },
+    {
+      "id": "claude-opus-4-6",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "5",
+        "outputUsdPerMTok": "25"
+      }
+    },
+    {
+      "id": "claude-opus-4-7",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "5",
+        "outputUsdPerMTok": "25"
+      }
+    },
+    {
+      "id": "claude-opus-4-8",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "5",
+        "outputUsdPerMTok": "25"
+      }
+    },
+    {
+      "id": "claude-opus-5",
+      "class": "opus",
+      "standard": {
+        "inputUsdPerMTok": "5",
+        "outputUsdPerMTok": "25"
+      }
+    },
+    {
+      "id": "claude-sonnet-4-0",
+      "class": "sonnet",
+      "standard": {
+        "inputUsdPerMTok": "3",
+        "outputUsdPerMTok": "15"
+      }
+    },
+    {
+      "id": "claude-sonnet-4-5",
+      "class": "sonnet",
+      "standard": {
+        "inputUsdPerMTok": "3",
+        "outputUsdPerMTok": "15"
+      }
+    },
+    {
+      "id": "claude-sonnet-4-6",
+      "class": "sonnet",
+      "standard": {
+        "inputUsdPerMTok": "3",
+        "outputUsdPerMTok": "15"
+      }
+    },
+    {
+      "id": "claude-sonnet-5",
+      "class": "sonnet",
+      "standard": {
+        "inputUsdPerMTok": "3",
+        "outputUsdPerMTok": "15"
+      }
+    }
+  ]
+}

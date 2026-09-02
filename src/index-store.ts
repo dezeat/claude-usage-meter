@@ -3,7 +3,7 @@ import { join, basename, dirname } from "node:path";
 
 import { aggregateTranscript, type ModelUsage } from "./aggregate.js";
 import { BURN_WINDOW_MS, sumUsage } from "./format.js";
-import { cost, type PricingTable } from "./pricing.js";
+import { cost, registeredModelClass, type PricingTable } from "./pricing.js";
 import {
   openDb,
   getSession,
@@ -94,10 +94,7 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 export function modelClass(modelId: string): string {
-  for (const cls of ["opus", "sonnet", "haiku", "fable"] as const) {
-    if (modelId.includes(cls)) return cls;
-  }
-  return modelId;
+  return registeredModelClass(modelId) ?? modelId;
 }
 
 // The parent session id of a subagent transcript, read off its path: Claude Code
