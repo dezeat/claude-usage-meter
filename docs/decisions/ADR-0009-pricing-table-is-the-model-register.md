@@ -1,10 +1,10 @@
 # ADR-0009: The pricing table is the model register; a priced figure is derived, never stored authoritatively
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-07-28
 - **Discussion:** https://github.com/dezeat/claude-usage-meter/discussions/149
-- **Supersedes on acceptance:** ADR-0004's persisted-cost authority; its
-  live-payload rule is restated and retained below
+- **Supersedes:** [ADR-0004](ADR-0004-two-cost-sources.md); its live-payload
+  rule is restated and retained below
 
 ## Context
 
@@ -53,10 +53,10 @@ must not be read when a valid token ledger exists. A pricing change therefore
 reprices historical token-backed rows immediately; no table version is stored
 per row.
 
-On acceptance, this rule **supersedes ADR-0004's statements that the
+When this accepted ADR merges, this rule **supersedes ADR-0004's statements that the
 write-time pricing calculation persisted in `row.costUsd` is authoritative for
 stored rows or wins merely because a store row exists**. ADR-0004 remains the
-historical record and is not edited. Its other authority rule survives exactly:
+historical record. Its other authority rule survives exactly:
 `payload.cost.total_cost_usd` is authoritative only for the live session when
 that session has no indexed token ledger yet. The payload cost is never written
 into or summed with a persisted aggregate. Once a valid token ledger exists,
@@ -80,8 +80,8 @@ is UTF-8 JSON with this version-1 shape (shown with one illustrative entry):
         "outputUsdPerMTok": "25"
       },
       "fast": {
-        "inputUsdPerMTok": "30",
-        "outputUsdPerMTok": "150"
+        "inputUsdPerMTok": "10",
+        "outputUsdPerMTok": "50"
       }
     }
   ]
@@ -91,8 +91,15 @@ is UTF-8 JSON with this version-1 shape (shown with one illustrative entry):
 The contract is exact:
 
 - `schemaVersion` is the integer `1`. Unknown versions fail validation.
-- `asOf` is a real UTC calendar date in `YYYY-MM-DD`. It advances whenever a
-  model, class, standard rate, or fast rate changes; a no-op never changes it.
+- `asOf` is a real UTC calendar date in `YYYY-MM-DD`: the UTC calendar date of
+  the verified, successful upstream retrieval whose provenance supports the
+  proposed register change. The retrieval timestamp, effective response URL,
+  and content digest remain in the watcher evidence; converting that timestamp
+  to UTC determines this field without local-time or run-time choice. A changed
+  register requires the proposed `asOf` to be greater than or equal to the
+  committed `asOf`. Missing or ambiguous retrieval provenance, an invalid UTC
+  date, or a regressing date fails closed before any write. An unchanged
+  observation is a no-op and does not bump `asOf`.
 - `models` is an array sorted bytewise ascending by `id`, with no duplicate
   IDs. `id` is the canonical dateless Claude model alias; dated transcript IDs
   continue to normalize to it before lookup.
@@ -192,7 +199,11 @@ model without fast rates contribute `$0`, set the existing unpriced signal, and
 remain in token totals. They never fall back to standard pricing. The identity
 row shows a dim `fast` marker only when the latest assistant turn explicitly
 said `fast`; `standard` and `unknown` are not rendered. ADR-0007's width priority
-still makes the marker sheddable.
+still makes the marker sheddable. This intentionally supersedes #143's earlier
+acceptance-criterion assumption that an unrecognised speed falls back to the
+standard rate: preserving the tokens while pricing them at `$0` is the
+fail-closed contract, and the unpriced signal prevents the condition from being
+silently swallowed.
 
 **5. Legacy rows have an explicit, non-destructive fallback.** A row with
 `tokens_json = NULL` and `byte_offset = 0` is the existing heartbeat-only
