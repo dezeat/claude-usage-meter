@@ -130,6 +130,13 @@ test("dated model aliases resolve through the canonical class register", () => {
   assert.equal(registeredModelClass("claude-opus-99"), undefined);
 });
 
+test("an unknown family keeps the legacy display fallback without becoming priced", () => {
+  assert.equal(registeredModelClass("claude-opus-99"), undefined);
+  const result = cost(oneMillionInput("claude-opus-99"), DEFAULT_PRICING);
+  assert.equal(result.perModel[0]?.known, false);
+  assert.equal(result.totalUsd, 0);
+});
+
 test("current Opus 5 bills 1M input tokens at the $5 Opus rate", () => {
   const result = cost(oneMillionInput("claude-opus-5"), DEFAULT_PRICING);
   assert.equal(result.totalUsd, 5); // published standard rate $5/MTok input

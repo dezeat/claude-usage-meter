@@ -94,7 +94,12 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 export function modelClass(modelId: string): string {
-  return registeredModelClass(modelId) ?? modelId;
+  const registered = registeredModelClass(modelId);
+  if (registered !== undefined) return registered;
+  for (const cls of ["opus", "sonnet", "haiku", "fable"] as const) {
+    if (modelId.includes(cls)) return cls;
+  }
+  return modelId;
 }
 
 // The parent session id of a subagent transcript, read off its path: Claude Code

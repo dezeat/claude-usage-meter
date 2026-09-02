@@ -57,6 +57,31 @@ test("unknown fields, noncanonical decimals, ordering, and inexact cache rates f
   }
 });
 
+test("unsafe numeric magnitudes and malformed canonical IDs fail closed", () => {
+  const boundary = structuredClone(valid);
+  boundary.models[0].standard.outputUsdPerMTok = "900719925.474099";
+  const boundaryOutput = renderRegister(JSON.stringify(boundary));
+  assert.match(boundaryOutput, /900719925\.474099/);
+  assert.doesNotMatch(boundaryOutput, /Infinity/);
+
+  for (const input of [
+    "9007199254.740992",
+    "999999999999999999999999999999999999",
+  ]) {
+    const copy = structuredClone(valid);
+    copy.models[0].standard.inputUsdPerMTok = input;
+    assert.throws(
+      () => renderRegister(JSON.stringify(copy)),
+      /exact finite runtime representation|round-trip exactly/,
+    );
+  }
+  for (const id of ["claude--opus-4-8", "claude-opus-4-8-"]) {
+    const copy = structuredClone(valid);
+    copy.models[0].id = id;
+    assert.throws(() => renderRegister(JSON.stringify(copy)), /canonical id/);
+  }
+});
+
 test("validation failure and check mode never write output", async () => {
   const root = await mkdtemp(join(tmpdir(), "pricing-generator-"));
   await mkdir(join(root, "pricing"));

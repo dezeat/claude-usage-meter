@@ -6,6 +6,7 @@ const DECIMAL = /^(?:0\.[0-9]*[1-9]|[1-9][0-9]*(?:\.[0-9]*[1-9])?)$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const MODEL_KEYS = ["id", "class", "standard"];
 const RATE_KEYS = ["inputUsdPerMTok", "outputUsdPerMTok"];
+const MAX_SAFE_MICROS = BigInt(Number.MAX_SAFE_INTEGER);
 
 function fail(message) {
   throw new Error(`invalid pricing register: ${message}`);
@@ -35,7 +36,22 @@ function decimalMicros(value, where) {
   }
   const [whole, fraction = ""] = value.split(".");
   if (fraction.length > 6) fail(`${where} exceeds six fractional digits`);
-  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+  const micros = BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, "0"));
+  if (micros > MAX_SAFE_MICROS) {
+    fail(`${where} exceeds exact finite runtime representation`);
+  }
+  const runtime = Number(micros) / 1_000_000;
+  const runtimeText = String(runtime);
+  const [runtimeWhole, runtimeFraction = ""] = runtimeText.split(".");
+  const runtimeMicros =
+    /^\d+(?:\.\d+)?$/.test(runtimeText) && runtimeFraction.length <= 6
+      ? BigInt(runtimeWhole) * 1_000_000n +
+        BigInt(runtimeFraction.padEnd(6, "0"))
+      : undefined;
+  if (!Number.isFinite(runtime) || runtimeMicros !== micros) {
+    fail(`${where} cannot round-trip exactly at micro-USD precision`);
+  }
+  return micros;
 }
 
 function validateTier(value, where) {
@@ -85,7 +101,7 @@ export function renderRegister(source) {
     exactKeys(model, MODEL_KEYS, `models[${index}]`, ["fast"]);
     if (
       typeof model.id !== "string" ||
-      !/^claude-[a-z0-9-]+$/.test(model.id) ||
+      !/^claude-[a-z0-9]+(?:-[a-z0-9]+)*$/.test(model.id) ||
       /-\d{8}$/.test(model.id)
     )
       fail(`models[${index}].id is not a dateless canonical id`);

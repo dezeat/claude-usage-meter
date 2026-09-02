@@ -32,7 +32,8 @@
   "scripts": {
     "generate:pricing": "node scripts/generate-pricing.mjs",
     "generate:pricing:check": "node scripts/generate-pricing.mjs --check",
-    "build": "npm run generate:pricing:check && tsc -p tsconfig.json",
+    "build": "npm run generate:pricing:check && node scripts/check-dist.mjs",
+    "build:write": "npm run generate:pricing:check && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json --noEmit",
     "lint": "oxlint --type-aware",
     "format": "prettier --write .",

@@ -11,7 +11,14 @@ function asRecord(value) {
         : undefined;
 }
 export function modelClass(modelId) {
-    return registeredModelClass(modelId) ?? modelId;
+    const registered = registeredModelClass(modelId);
+    if (registered !== undefined)
+        return registered;
+    for (const cls of ["opus", "sonnet", "haiku", "fable"]) {
+        if (modelId.includes(cls))
+            return cls;
+    }
+    return modelId;
 }
 // The parent session id of a subagent transcript, read off its path: Claude Code
 // writes subagent turns to <project>/<PARENT_SESSION_ID>/subagents/<file>.jsonl
