@@ -103,7 +103,10 @@ whenever `src/` changes — the PR checklist enforces it.
 
 **Public repo — every commit is world-readable.** Never commit secrets, real
 keys, or personal data; fixtures are synthetic. A gitleaks secret-scan runs in
-CI and a large-file guard runs pre-commit.
+CI and a large-file guard runs pre-commit. **Commit identity is part of this:**
+author and committer email must be the GitHub noreply address, never a personal
+one; the CI `lint` job rejects any other address, and a personal address already
+in history is a coordinated rewrite, not a quiet fix.
 
 ## Project management & docs live in GitHub
 
