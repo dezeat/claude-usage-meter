@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 From the next release onward, entries below are generated from
 [Conventional Commits](https://www.conventionalcommits.org/) by release-please.
 
+## [1.4.0](https://github.com/dezeat/claude-usage-meter/compare/v1.3.0...v1.4.0) (2026-09-06)
+
+
+### Features
+
+* adopt canonical pricing register ([#167](https://github.com/dezeat/claude-usage-meter/issues/167)) ([f8942f8](https://github.com/dezeat/claude-usage-meter/commit/f8942f87485bdd7d85771e51a9460587e993b62a))
+
 ## [1.3.0](https://github.com/dezeat/claude-usage-meter/compare/v1.2.1...v1.3.0) (2026-09-02)
 
 
