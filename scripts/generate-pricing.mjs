@@ -61,15 +61,21 @@ function exactRuntimeNumber(micros, where) {
 
 function validateTier(value, where) {
   const tier = record(value, where);
-  exactKeys(tier, RATE_KEYS, where);
+  exactKeys(tier, RATE_KEYS, where, ["cacheReadUsdPerMTok"]);
   const input = decimalMicros(tier.inputUsdPerMTok, `${where}.inputUsdPerMTok`);
   const output = decimalMicros(
     tier.outputUsdPerMTok,
     `${where}.outputUsdPerMTok`,
   );
   const cacheCreation = (input * 125n) / 100n;
-  const cacheRead = (input * 10n) / 100n;
-  if ((input * 125n) % 100n !== 0n || (input * 10n) % 100n !== 0n) {
+  const hasExactRead = Object.hasOwn(tier, "cacheReadUsdPerMTok");
+  const cacheRead = hasExactRead
+    ? decimalMicros(tier.cacheReadUsdPerMTok, `${where}.cacheReadUsdPerMTok`)
+    : (input * 10n) / 100n;
+  if (
+    (input * 125n) % 100n !== 0n ||
+    (!hasExactRead && (input * 10n) % 100n !== 0n)
+  ) {
     fail(`${where} cache rates are not exact micro-USD`);
   }
   return {
@@ -92,7 +98,7 @@ export function renderRegister(source) {
   }
   const root = record(parsed, "root");
   exactKeys(root, ["schemaVersion", "asOf", "models"], "root");
-  if (root.schemaVersion !== 1) fail("schemaVersion must be 1");
+  if (root.schemaVersion !== 2) fail("schemaVersion must be 2");
   if (
     typeof root.asOf !== "string" ||
     !DATE.test(root.asOf) ||
