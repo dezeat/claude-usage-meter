@@ -144,8 +144,67 @@ test("current Opus 5 bills 1M input tokens at the $5 Opus rate", () => {
   assert.equal(result.hasUnknownModels, false);
 });
 
-test("current Sonnet 5 bills 1M input tokens at the $3 Sonnet rate", () => {
-  const result = cost(oneMillionInput("claude-sonnet-5"), DEFAULT_PRICING);
-  assert.equal(result.totalUsd, 3); // published standard rate $3/MTok input
-  assert.equal(result.perModel[0]?.known, true);
+function oneMillionOf(
+  model: string,
+  token:
+    "inputTokens" | "outputTokens" | "cacheReadTokens" | "cacheCreationTokens",
+): UsageByModel {
+  return {
+    models: {
+      [model]: {
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        [token]: 1_000_000,
+      },
+    },
+    skippedLines: 0,
+  };
+}
+
+// Oracle: https://platform.claude.com/docs/en/about-claude/pricing, verified
+// 2026-11-25 (input / output / cache hit / 5m cache write, USD per MTok).
+const PUBLISHED_STANDARD_RATES: Record<
+  string,
+  [number, number, number, number]
+> = {
+  "claude-fable-5-2": [8, 40, 0.2, 10],
+  "claude-mythos-5-2": [8, 40, 0.2, 10],
+  "claude-fable-5-1": [10, 50, 0.25, 12.5],
+  "claude-mythos-5-1": [10, 50, 0.25, 12.5],
+  "claude-opus-5-5": [4, 20, 0.2, 5],
+  "claude-sonnet-5-5": [2, 10, 0.1, 2.5],
+  "claude-sonnet-5": [2, 10, 0.2, 2.5],
+};
+
+test("latest models bill every token class at their published rates", () => {
+  for (const [model, rates] of Object.entries(PUBLISHED_STANDARD_RATES)) {
+    const tokens = [
+      "inputTokens",
+      "outputTokens",
+      "cacheReadTokens",
+      "cacheCreationTokens",
+    ] as const;
+    for (const [index, token] of tokens.entries()) {
+      const result = cost(oneMillionOf(model, token), DEFAULT_PRICING);
+      assert.equal(result.totalUsd, rates[index], `${model} ${token}`);
+      assert.equal(result.hasUnknownModels, false, model);
+    }
+  }
+});
+
+test("latest models resolve to their family class", () => {
+  assert.equal(registeredModelClass("claude-opus-5-5"), "opus");
+  assert.equal(registeredModelClass("claude-sonnet-5-5"), "sonnet");
+  assert.equal(registeredModelClass("claude-fable-5-2"), "fable");
+  assert.equal(registeredModelClass("claude-mythos-5-2"), "fable");
+});
+
+// Haiku 5.5 bills by prompt length (over 100K tokens costs 5x), which a
+// per-model rate cannot see — so it stays unpriced rather than understated.
+test("prompt-length-tiered Haiku 5.5 stays unpriced", () => {
+  const result = cost(oneMillionInput("claude-haiku-5-5"), DEFAULT_PRICING);
+  assert.equal(result.perModel[0]?.known, false);
+  assert.equal(result.totalUsd, 0);
 });
